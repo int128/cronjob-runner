@@ -45,6 +45,7 @@ func createJobFromCronJob(ctx context.Context, clientset *kubernetes.Clientset, 
 }
 
 func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace, jobName string) (batchv1.JobConditionType, error) {
+	log.Printf("Initializing the Job informer")
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Hour*24,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -52,9 +53,9 @@ func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace,
 		}),
 	)
 	informer := informerFactory.Batch().V1().Jobs().Informer()
-	conditionTypeCh := make(chan batchv1.JobConditionType)
-	defer close(conditionTypeCh)
-	if _, err := informer.AddEventHandler(&jobEventHandler{conditionTypeCh: conditionTypeCh}); err != nil {
+	finishedCh := make(chan batchv1.JobConditionType)
+	defer close(finishedCh)
+	if _, err := informer.AddEventHandler(&jobEventHandler{finishedCh: finishedCh}); err != nil {
 		return "", fmt.Errorf("could not add an event handler to the Job informer: %w", err)
 	}
 	stopCh := make(chan struct{})
@@ -63,8 +64,9 @@ func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace,
 	if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
 		return "", fmt.Errorf("cache.WaitForCacheSync() returned false")
 	}
+	log.Printf("Waiting for the Job %s/%s", namespace, jobName)
 	select {
-	case conditionType := <-conditionTypeCh:
+	case conditionType := <-finishedCh:
 		log.Printf("Shutting down the Job informer")
 		return conditionType, nil
 	case <-ctx.Done():
@@ -74,7 +76,8 @@ func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace,
 }
 
 type jobEventHandler struct {
-	conditionTypeCh chan batchv1.JobConditionType
+	// sent when the job is completed or failed
+	finishedCh chan<- batchv1.JobConditionType
 }
 
 func (h *jobEventHandler) OnAdd(interface{}, bool) {}
@@ -94,9 +97,9 @@ func (h *jobEventHandler) OnUpdate(_, newObj interface{}) {
 		return
 	}
 	if condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed {
-		log.Printf("Job %s/%s was %s: %s: %s",
+		log.Printf("Job %s/%s is %s: %s: %s",
 			job.Namespace, job.Name, condition.Type, condition.Reason, condition.Message)
-		h.conditionTypeCh <- condition.Type
+		h.finishedCh <- condition.Type
 	}
 }
 

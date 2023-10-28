@@ -40,7 +40,7 @@ func run(o options) error {
 		return fmt.Errorf("could not wait for the Job: %w", err)
 	}
 	if jobConditionType == batchv1.JobFailed {
-		return fmt.Errorf("the Job %s/%s was failed")
+		return fmt.Errorf("job has been failed")
 	}
 	return nil
 }
