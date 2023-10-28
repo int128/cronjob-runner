@@ -35,13 +35,12 @@ func run(o options) error {
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
-	jobCondition, err := waitForJob(ctx, clientset, job.Namespace, job.Name)
+	jobConditionType, err := waitForJob(ctx, clientset, job.Namespace, job.Name)
 	if err != nil {
 		return fmt.Errorf("could not wait for the Job: %w", err)
 	}
-	if jobCondition.Type == batchv1.JobFailed {
-		return fmt.Errorf("the Job %s/%s has been failed: %s: %s",
-			job.Namespace, job.Name, jobCondition.Reason, jobCondition.Message)
+	if jobConditionType == batchv1.JobFailed {
+		return fmt.Errorf("the Job %s/%s was failed")
 	}
 	return nil
 }

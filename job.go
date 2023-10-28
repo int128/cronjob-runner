@@ -44,37 +44,37 @@ func createJobFromCronJob(ctx context.Context, clientset *kubernetes.Clientset, 
 	return job, nil
 }
 
-func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace, jobName string) (*batchv1.JobCondition, error) {
+func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace, jobName string) (batchv1.JobConditionType, error) {
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Hour*24,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
 			options.FieldSelector = fmt.Sprintf("metadata.name=%s", jobName)
 		}),
 	)
-	jobInformer := informerFactory.Batch().V1().Jobs()
-	jobConditionCh := make(chan *batchv1.JobCondition)
-	defer close(jobConditionCh)
-	if _, err := jobInformer.Informer().AddEventHandler(&jobEventHandler{jobConditionCh: jobConditionCh}); err != nil {
-		return nil, fmt.Errorf("could not add an event handler to the Job informer: %w", err)
+	informer := informerFactory.Batch().V1().Jobs().Informer()
+	conditionTypeCh := make(chan batchv1.JobConditionType)
+	defer close(conditionTypeCh)
+	if _, err := informer.AddEventHandler(&jobEventHandler{conditionTypeCh: conditionTypeCh}); err != nil {
+		return "", fmt.Errorf("could not add an event handler to the Job informer: %w", err)
 	}
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 	informerFactory.Start(stopCh)
-	if !cache.WaitForCacheSync(stopCh, jobInformer.Informer().HasSynced) {
-		return nil, fmt.Errorf("error WaitForCacheSync()")
+	if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
+		return "", fmt.Errorf("cache.WaitForCacheSync() returned false")
 	}
 	select {
-	case jobCondition := <-jobConditionCh:
+	case conditionType := <-conditionTypeCh:
 		log.Printf("Shutting down the Job informer")
-		return jobCondition, nil
+		return conditionType, nil
 	case <-ctx.Done():
 		log.Printf("Shutting down the Job informer: %s", ctx.Err())
-		return nil, ctx.Err()
+		return "", ctx.Err()
 	}
 }
 
 type jobEventHandler struct {
-	jobConditionCh chan *batchv1.JobCondition
+	conditionTypeCh chan batchv1.JobConditionType
 }
 
 func (h *jobEventHandler) OnAdd(interface{}, bool) {}
@@ -93,7 +93,11 @@ func (h *jobEventHandler) OnUpdate(_, newObj interface{}) {
 	if condition == nil {
 		return
 	}
-	h.jobConditionCh <- condition
+	if condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed {
+		log.Printf("Job %s/%s was %s: %s: %s",
+			job.Namespace, job.Name, condition.Type, condition.Reason, condition.Message)
+		h.conditionTypeCh <- condition.Type
+	}
 }
 
 func findJobCondition(job *batchv1.Job) *batchv1.JobCondition {
