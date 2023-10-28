@@ -8,7 +8,6 @@ import (
 	"os/signal"
 
 	"github.com/spf13/pflag"
-	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 )
@@ -35,11 +34,11 @@ func run(o options) error {
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
-	jobConditionType, err := waitForJob(ctx, clientset, job.Namespace, job.Name)
+	success, err := waitForJob(ctx, clientset, job.Namespace, job.Name)
 	if err != nil {
 		return fmt.Errorf("could not wait for the Job: %w", err)
 	}
-	if jobConditionType == batchv1.JobFailed {
+	if !success {
 		return fmt.Errorf("job has been failed")
 	}
 	return nil
