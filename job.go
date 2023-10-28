@@ -43,7 +43,16 @@ func createJobFromCronJob(ctx context.Context, clientset *kubernetes.Clientset, 
 	return job, nil
 }
 
-func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace, jobName string) (bool, error) {
+type JobInformer interface {
+	Shutdown()
+}
+
+func startJobInformer(
+	clientset *kubernetes.Clientset,
+	namespace, jobName string,
+	stopCh <-chan struct{},
+	finishedCh chan<- batchv1.JobConditionType,
+) (JobInformer, error) {
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Hour*24,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -51,26 +60,12 @@ func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace,
 		}),
 	)
 	informer := informerFactory.Batch().V1().Jobs().Informer()
-	finishedCh := make(chan batchv1.JobConditionType)
-	defer close(finishedCh)
 	if _, err := informer.AddEventHandler(&jobEventHandler{finishedCh: finishedCh}); err != nil {
-		return false, fmt.Errorf("could not add an event handler to the informer: %w", err)
+		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
 	}
-	stopCh := make(chan struct{})
-	defer func() {
-		close(stopCh)
-		informerFactory.Shutdown()
-		log.Printf("Stopped the informer")
-	}()
 	informerFactory.Start(stopCh)
 	log.Printf("Watching the job %s/%s", namespace, jobName)
-	select {
-	case conditionType := <-finishedCh:
-		return conditionType == batchv1.JobComplete, nil
-	case <-ctx.Done():
-		log.Printf("Stopping the informer: %s", ctx.Err())
-		return false, ctx.Err()
-	}
+	return informerFactory, nil
 }
 
 type jobEventHandler struct {

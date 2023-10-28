@@ -11,7 +11,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func watchJobPod(clientset *kubernetes.Clientset, namespace, jobName string, stopCh <-chan struct{}) error {
+type PodInformer interface {
+	Shutdown()
+}
+
+func startPodInformer(
+	clientset *kubernetes.Clientset,
+	namespace, jobName string,
+	stopCh <-chan struct{},
+) (PodInformer, error) {
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Hour*24,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -20,13 +28,11 @@ func watchJobPod(clientset *kubernetes.Clientset, namespace, jobName string, sto
 	)
 	informer := informerFactory.Core().V1().Pods().Informer()
 	if _, err := informer.AddEventHandler(&podEventHandler{}); err != nil {
-		return fmt.Errorf("could not add an event handler to the informer: %w", err)
+		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
 	}
 	informerFactory.Start(stopCh)
 	log.Printf("Watching a pod of job %s/%s", namespace, jobName)
-	informerFactory.Shutdown()
-	log.Printf("Stopped the informer")
-	return nil
+	return informerFactory, nil
 }
 
 type podEventHandler struct{}

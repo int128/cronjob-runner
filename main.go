@@ -8,7 +8,8 @@ import (
 	"os/signal"
 
 	"github.com/spf13/pflag"
-	"golang.org/x/sync/errgroup"
+	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 )
@@ -30,32 +31,47 @@ func run(o options) error {
 	if err != nil {
 		return fmt.Errorf("could not create a Kubernetes client: %w", err)
 	}
+	serverVersion, err := clientset.ServerVersion()
+	if err != nil {
+		return fmt.Errorf("could not get the server version: %w", err)
+	}
+	log.Printf("Cluster version %s", serverVersion)
 
 	job, err := createJobFromCronJob(ctx, clientset, namespace, o.cronJobName)
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
 
-	var eg errgroup.Group
+	var shutdownGroup wait.Group
+	defer func() {
+		shutdownGroup.Wait()
+		log.Printf("Stopped all informers")
+	}()
+	jobFinishedCh := make(chan batchv1.JobConditionType)
+	defer close(jobFinishedCh)
 	stopCh := make(chan struct{})
-	eg.Go(func() error {
-		if err := watchJobPod(clientset, job.Namespace, job.Name, stopCh); err != nil {
-			log.Printf("Error while watching the pod: %s", err)
+	defer close(stopCh)
+
+	podInformer, err := startPodInformer(clientset, job.Namespace, job.Name, stopCh)
+	if err != nil {
+		return fmt.Errorf("could not start the pod informer: %w", err)
+	}
+	shutdownGroup.Start(podInformer.Shutdown)
+	jobInformer, err := startJobInformer(clientset, job.Namespace, job.Name, stopCh, jobFinishedCh)
+	if err != nil {
+		return fmt.Errorf("could not start the job informer: %w", err)
+	}
+	shutdownGroup.Start(jobInformer.Shutdown)
+	select {
+	case jobConditionType := <-jobFinishedCh:
+		if jobConditionType == batchv1.JobFailed {
+			return fmt.Errorf("job %s/%s failed", job.Namespace, job.Name)
 		}
 		return nil
-	})
-	eg.Go(func() error {
-		defer close(stopCh)
-		success, err := waitForJob(ctx, clientset, job.Namespace, job.Name)
-		if err != nil {
-			return fmt.Errorf("could not wait for the Job: %w", err)
-		}
-		if !success {
-			return fmt.Errorf("job has been failed")
-		}
-		return nil
-	})
-	return eg.Wait()
+	case <-ctx.Done():
+		log.Printf("Shutting down: %s", ctx.Err())
+		return ctx.Err()
+	}
 }
 
 type options struct {
