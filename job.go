@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/pointer"
 )
 
@@ -45,7 +44,6 @@ func createJobFromCronJob(ctx context.Context, clientset *kubernetes.Clientset, 
 }
 
 func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace, jobName string) (bool, error) {
-	log.Printf("Initializing the Job informer")
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Hour*24,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -56,21 +54,21 @@ func waitForJob(ctx context.Context, clientset *kubernetes.Clientset, namespace,
 	finishedCh := make(chan batchv1.JobConditionType)
 	defer close(finishedCh)
 	if _, err := informer.AddEventHandler(&jobEventHandler{finishedCh: finishedCh}); err != nil {
-		return false, fmt.Errorf("could not add an event handler to the Job informer: %w", err)
+		return false, fmt.Errorf("could not add an event handler to the informer: %w", err)
 	}
 	stopCh := make(chan struct{})
-	defer close(stopCh)
+	defer func() {
+		close(stopCh)
+		informerFactory.Shutdown()
+		log.Printf("Stopped the informer")
+	}()
 	informerFactory.Start(stopCh)
-	if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
-		return false, fmt.Errorf("cache.WaitForCacheSync() returned false")
-	}
-	log.Printf("Waiting for the Job %s/%s", namespace, jobName)
+	log.Printf("Watching the job %s/%s", namespace, jobName)
 	select {
 	case conditionType := <-finishedCh:
-		log.Printf("Shutting down the Job informer")
 		return conditionType == batchv1.JobComplete, nil
 	case <-ctx.Done():
-		log.Printf("Shutting down the Job informer: %s", ctx.Err())
+		log.Printf("Stopping the informer: %s", ctx.Err())
 		return false, ctx.Err()
 	}
 }
@@ -80,25 +78,19 @@ type jobEventHandler struct {
 	finishedCh chan<- batchv1.JobConditionType
 }
 
-func (h *jobEventHandler) OnAdd(interface{}, bool) {}
-func (h *jobEventHandler) OnDelete(interface{})    {}
+func (h *jobEventHandler) OnAdd(obj interface{}, _ bool) {
+	job := obj.(*batchv1.Job)
+	log.Printf("Job %s/%s is created", job.Namespace, job.Name)
+}
 
 func (h *jobEventHandler) OnUpdate(_, newObj interface{}) {
 	job := newObj.(*batchv1.Job)
 	condition := findJobCondition(job)
-	log.Printf("Job %s/%s has the pod(s) of active=%d, succeeded=%d, failed=%d",
-		job.Namespace,
-		job.Name,
-		job.Status.Active,
-		job.Status.Succeeded,
-		job.Status.Failed,
-	)
 	if condition == nil {
 		return
 	}
+	log.Printf("Job %s/%s is %s %s", job.Namespace, job.Name, condition.Type, formatJobConditionMessage(condition))
 	if condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed {
-		log.Printf("Job %s/%s is %s: %s: %s",
-			job.Namespace, job.Name, condition.Type, condition.Reason, condition.Message)
 		h.finishedCh <- condition.Type
 	}
 }
@@ -110,4 +102,19 @@ func findJobCondition(job *batchv1.Job) *batchv1.JobCondition {
 		}
 	}
 	return nil
+}
+
+func formatJobConditionMessage(condition *batchv1.JobCondition) string {
+	if condition.Message == "" && condition.Reason == "" {
+		return ""
+	}
+	if condition.Message == "" {
+		return fmt.Sprintf("(%s)", condition.Reason)
+	}
+	return fmt.Sprintf("(%s: %s)", condition.Reason, condition.Message)
+}
+
+func (h *jobEventHandler) OnDelete(obj interface{}) {
+	job := obj.(*batchv1.Job)
+	log.Printf("Job %s/%s is deleted", job.Namespace, job.Name)
 }
