@@ -19,6 +19,7 @@ func startPodInformer(
 	clientset *kubernetes.Clientset,
 	namespace, jobName string,
 	stopCh <-chan struct{},
+	notifyContainerRunning func(namespace, podName, containerName string),
 ) (PodInformer, error) {
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Hour*24,
 		informers.WithNamespace(namespace),
@@ -27,7 +28,7 @@ func startPodInformer(
 		}),
 	)
 	informer := informerFactory.Core().V1().Pods().Informer()
-	if _, err := informer.AddEventHandler(&podEventHandler{}); err != nil {
+	if _, err := informer.AddEventHandler(&podEventHandler{notifyContainerRunning: notifyContainerRunning}); err != nil {
 		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
 	}
 	informerFactory.Start(stopCh)
@@ -35,7 +36,9 @@ func startPodInformer(
 	return informerFactory, nil
 }
 
-type podEventHandler struct{}
+type podEventHandler struct {
+	notifyContainerRunning func(namespace, podName, containerName string)
+}
 
 func (h *podEventHandler) OnAdd(obj interface{}, _ bool) {
 	pod := obj.(*corev1.Pod)
@@ -68,6 +71,7 @@ func (h *podEventHandler) notifyContainerStatusChanges(namespace, podName string
 		}
 		if containerStatus.State.Running != nil {
 			log.Printf("Pod %s/%s: Container %s is running", namespace, podName, containerStatus.Name)
+			h.notifyContainerRunning(namespace, podName, containerStatus.Name)
 		}
 		if containerStatus.State.Terminated != nil {
 			terminated := containerStatus.State.Terminated
