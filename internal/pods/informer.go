@@ -94,7 +94,10 @@ func (h *eventHandler) notifyContainerStarted(namespace, podName string, oldStat
 	for _, change := range containerStateChanges {
 		oldState := getContainerState(change.oldStatus)
 		newState := getContainerState(change.newStatus)
-		if oldState != "Running" && newState == "Running" {
+		// Waiting -> Running
+		// Waiting -> Terminated
+		// Terminated -> Running
+		if (oldState == "Waiting" && newState != "Waiting") || (oldState == "Terminated" && newState == "Running") {
 			event := ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
 			h.containerStartedCh <- event
 		}
@@ -139,6 +142,8 @@ func mapContainerStatusByName(containerStatuses []corev1.ContainerStatus) map[st
 }
 
 func getContainerState(containerStatus corev1.ContainerStatus) string {
+	// According to corev1.ContainerState, either member is set.
+	// If none of them is specified, default to corev1.ContainerStateWaiting.
 	if containerStatus.State.Waiting != nil {
 		return "Waiting"
 	}
@@ -148,7 +153,7 @@ func getContainerState(containerStatus corev1.ContainerStatus) string {
 	if containerStatus.State.Terminated != nil {
 		return "Terminated"
 	}
-	return ""
+	return "Waiting"
 }
 
 func (h *eventHandler) OnDelete(obj interface{}) {
