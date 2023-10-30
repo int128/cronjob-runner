@@ -1,4 +1,4 @@
-package main
+package pods
 
 import (
 	"fmt"
@@ -11,16 +11,16 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type PodInformer interface {
+type Informer interface {
 	Shutdown()
 }
 
-func startPodInformer(
+func StartInformer(
 	clientset *kubernetes.Clientset,
 	namespace, jobName string,
 	stopCh <-chan struct{},
 	notifyContainerRunning func(namespace, podName, containerName string),
-) (PodInformer, error) {
+) (Informer, error) {
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(clientset, time.Hour*24,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -28,7 +28,7 @@ func startPodInformer(
 		}),
 	)
 	informer := informerFactory.Core().V1().Pods().Informer()
-	if _, err := informer.AddEventHandler(&podEventHandler{notifyContainerRunning: notifyContainerRunning}); err != nil {
+	if _, err := informer.AddEventHandler(&eventHandler{notifyContainerRunning: notifyContainerRunning}); err != nil {
 		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
 	}
 	informerFactory.Start(stopCh)
@@ -36,16 +36,16 @@ func startPodInformer(
 	return informerFactory, nil
 }
 
-type podEventHandler struct {
+type eventHandler struct {
 	notifyContainerRunning func(namespace, podName, containerName string)
 }
 
-func (h *podEventHandler) OnAdd(obj interface{}, _ bool) {
+func (h *eventHandler) OnAdd(obj interface{}, _ bool) {
 	pod := obj.(*corev1.Pod)
 	log.Printf("Pod %s/%s is %s", pod.Namespace, pod.Name, pod.Status.Phase)
 }
 
-func (h *podEventHandler) OnUpdate(oldObj, newObj interface{}) {
+func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
 	oldPod := oldObj.(*corev1.Pod)
 	newPod := newObj.(*corev1.Pod)
 	h.notifyPodStatusChange(oldPod, newPod)
@@ -53,14 +53,14 @@ func (h *podEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	h.notifyContainerStatusChanges(newPod.Namespace, newPod.Name, oldPod.Status.ContainerStatuses, newPod.Status.ContainerStatuses)
 }
 
-func (h *podEventHandler) notifyPodStatusChange(oldPod, newPod *corev1.Pod) {
+func (h *eventHandler) notifyPodStatusChange(oldPod, newPod *corev1.Pod) {
 	if oldPod.Status.Phase == newPod.Status.Phase {
 		return
 	}
 	log.Printf("Pod %s/%s is %s", newPod.Namespace, newPod.Name, newPod.Status.Phase)
 }
 
-func (h *podEventHandler) notifyContainerStatusChanges(namespace, podName string, oldStatuses, newStatuses []corev1.ContainerStatus) {
+func (h *eventHandler) notifyContainerStatusChanges(namespace, podName string, oldStatuses, newStatuses []corev1.ContainerStatus) {
 	changedContainerStatuses := computeContainerStateChanges(oldStatuses, newStatuses)
 	for _, containerStatus := range changedContainerStatuses {
 		if containerStatus.State.Waiting != nil {
@@ -127,7 +127,7 @@ func getContainerState(containerStatus corev1.ContainerStatus) string {
 	return ""
 }
 
-func (h *podEventHandler) OnDelete(obj interface{}) {
+func (h *eventHandler) OnDelete(obj interface{}) {
 	pod := obj.(*corev1.Pod)
 	log.Printf("Pod %s/%s is deleted", pod.Namespace, pod.Name)
 }

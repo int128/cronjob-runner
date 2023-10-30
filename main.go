@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/int128/cronjob-runner/internal/jobs"
 	"github.com/int128/cronjob-runner/internal/logs"
+	"github.com/int128/cronjob-runner/internal/pods"
 	"github.com/spf13/pflag"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -38,7 +40,7 @@ func run(o options) error {
 	}
 	log.Printf("Cluster version %s", serverVersion)
 
-	job, err := createJobFromCronJob(ctx, clientset, namespace, o.cronJobName)
+	job, err := jobs.CreateFromCronJob(ctx, clientset, namespace, o.cronJobName)
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
@@ -53,7 +55,7 @@ func run(o options) error {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	podInformer, err := startPodInformer(clientset, job.Namespace, job.Name, stopCh,
+	podInformer, err := pods.StartInformer(clientset, job.Namespace, job.Name, stopCh,
 		func(namespace, podName, containerName string) {
 			backgroundWaiter.Start(func() {
 				logs.Tail(ctx, clientset, namespace, podName, containerName)
@@ -63,11 +65,13 @@ func run(o options) error {
 		return fmt.Errorf("could not start the pod informer: %w", err)
 	}
 	backgroundWaiter.Start(podInformer.Shutdown)
-	jobInformer, err := startJobInformer(clientset, job.Namespace, job.Name, stopCh, jobFinishedCh)
+
+	jobInformer, err := jobs.StartInformer(clientset, job.Namespace, job.Name, stopCh, jobFinishedCh)
 	if err != nil {
 		return fmt.Errorf("could not start the job informer: %w", err)
 	}
 	backgroundWaiter.Start(jobInformer.Shutdown)
+
 	select {
 	case jobConditionType := <-jobFinishedCh:
 		if jobConditionType == batchv1.JobFailed {
