@@ -91,7 +91,7 @@ type options struct {
 
 func (o *options) addFlags(f *pflag.FlagSet) {
 	o.k8sFlags.AddFlags(f)
-	f.StringVarP(&o.cronJobName, "cron-job-name", "", "", "Name of CronJob")
+	f.StringVarP(&o.cronJobName, "cronjob-name", "", "", "Name of CronJob")
 }
 
 func main() {
