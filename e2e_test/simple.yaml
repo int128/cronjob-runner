@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: simple
+spec:
+  schedule: @annually
+  suspend: true # run by cronjob-runner
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: simple
+              image: debian:stable
+              command:
+                - date
