@@ -15,6 +15,7 @@ import (
 )
 
 func Tail(ctx context.Context, clientset *kubernetes.Clientset, namespace, podName, containerName string) {
+	log.Printf("Tailing the container log of %s/%s/%s", namespace, podName, containerName)
 	var t tailer
 	for {
 		if err := t.resume(ctx, clientset, namespace, podName, containerName); err != nil {
