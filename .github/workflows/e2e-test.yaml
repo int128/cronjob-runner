@@ -27,5 +27,6 @@ jobs:
           go-version: 1.21.3
       - run: go build .
       - run: kind create cluster
-      - run: kubectl apply -f e2e_test/simple.yaml
+      - run: kubectl apply -f e2e_test
       - run: ./cronjob-runner --cronjob-name simple
+      - run: ./cronjob-runner --cronjob-name multiple-containers
