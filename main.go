@@ -47,6 +47,7 @@ func run(o options) error {
 
 	var backgroundWaiter wait.Group
 	defer func() {
+		// This must be run after all of defer close()
 		backgroundWaiter.Wait()
 		log.Printf("Stopped background workers")
 	}()
@@ -55,12 +56,17 @@ func run(o options) error {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	podInformer, err := pods.StartInformer(clientset, job.Namespace, job.Name, stopCh,
-		func(namespace, podName, containerName string) {
+	containerStartedCh := make(chan pods.ContainerStartedEvent)
+	defer close(containerStartedCh)
+	backgroundWaiter.Start(func() {
+		for event := range containerStartedCh {
+			event := event
 			backgroundWaiter.Start(func() {
-				logs.Tail(ctx, clientset, namespace, podName, containerName)
+				logs.Tail(ctx, clientset, event.Namespace, event.PodName, event.ContainerName)
 			})
-		})
+		}
+	})
+	podInformer, err := pods.StartInformer(clientset, job.Namespace, job.Name, stopCh, containerStartedCh)
 	if err != nil {
 		return fmt.Errorf("could not start the pod informer: %w", err)
 	}
