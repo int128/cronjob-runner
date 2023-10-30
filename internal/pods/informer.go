@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
 )
 
 type Informer interface {
@@ -93,9 +92,9 @@ func (h *eventHandler) notifyContainerStatusChanges(namespace, podName string, o
 func (h *eventHandler) notifyContainerStarted(namespace, podName string, oldStatuses, newStatuses []corev1.ContainerStatus) {
 	containerStateChanges := computeContainerStateChanges(oldStatuses, newStatuses)
 	for _, change := range containerStateChanges {
-		oldStarted := pointer.BoolDeref(change.oldStatus.Started, false)
-		newStarted := pointer.BoolDeref(change.newStatus.Started, false)
-		if !oldStarted && newStarted {
+		oldNotStarted := change.oldStatus.State.Waiting != nil
+		newStarted := change.newStatus.State.Running != nil || change.newStatus.State.Terminated != nil
+		if oldNotStarted && newStarted {
 			h.containerStartedCh <- ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
 		}
 	}
