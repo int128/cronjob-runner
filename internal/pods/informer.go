@@ -92,10 +92,11 @@ func (h *eventHandler) notifyContainerStatusChanges(namespace, podName string, o
 func (h *eventHandler) notifyContainerStarted(namespace, podName string, oldStatuses, newStatuses []corev1.ContainerStatus) {
 	containerStateChanges := computeContainerStateChanges(oldStatuses, newStatuses)
 	for _, change := range containerStateChanges {
-		oldNotStarted := change.oldStatus.State.Waiting != nil
-		newStarted := change.newStatus.State.Running != nil || change.newStatus.State.Terminated != nil
-		if oldNotStarted && newStarted {
-			h.containerStartedCh <- ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
+		oldState := getContainerState(change.oldStatus)
+		newState := getContainerState(change.newStatus)
+		if oldState != "Running" && newState == "Running" {
+			event := ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
+			h.containerStartedCh <- event
 		}
 	}
 }
