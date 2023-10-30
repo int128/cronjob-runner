@@ -16,7 +16,8 @@ spec:
             - name: init
               image: debian:stable
               command:
-                - date
+                - echo
+                - '__INIT__'
           containers:
             - name: foo
               image: debian:stable
@@ -24,9 +25,10 @@ spec:
                 - bash
                 - -c
                 - |
-                  sleep 3
-                  date
+                  sleep 2
+                  echo '__FOO__'
             - name: bar
               image: debian:stable
               command:
-                - date
+                - echo
+                - '__BAR__'
