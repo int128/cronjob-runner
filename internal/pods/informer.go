@@ -98,8 +98,7 @@ func (h *eventHandler) notifyContainerStarted(namespace, podName string, oldStat
 		// Waiting -> Terminated
 		// Terminated -> Running
 		if (oldState == "Waiting" && newState != "Waiting") || (oldState == "Terminated" && newState == "Running") {
-			event := ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
-			h.containerStartedCh <- event
+			h.containerStartedCh <- ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
 		}
 	}
 }

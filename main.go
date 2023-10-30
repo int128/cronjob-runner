@@ -60,6 +60,7 @@ func run(o options) error {
 	defer close(containerStartedCh)
 	backgroundWaiter.Start(func() {
 		for event := range containerStartedCh {
+			event := event
 			backgroundWaiter.Start(func() {
 				logs.Tail(ctx, clientset, event.Namespace, event.PodName, event.ContainerName)
 			})
