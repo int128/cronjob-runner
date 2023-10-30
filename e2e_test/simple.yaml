@@ -3,8 +3,9 @@ kind: CronJob
 metadata:
   name: simple
 spec:
-  schedule: @annually
-  suspend: true # run by cronjob-runner
+  # run by cronjob-runner
+  suspend: true
+  schedule: '@annually'
   jobTemplate:
     spec:
       backoffLimit: 3
