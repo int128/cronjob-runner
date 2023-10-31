@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: conditional
+spec:
+  # run by cronjob-runner
+  suspend: true
+  schedule: '@annually'
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: example
+              image: debian:stable
+              command:
+                - bash
+                - -c
+                - |
+                  set -eux
+                  test "${SHOULD_BE_TRUE}" = "true"

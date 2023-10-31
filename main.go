@@ -40,10 +40,11 @@ func run(o options) error {
 	}
 	log.Printf("Cluster version %s", serverVersion)
 
-	job, err := jobs.CreateFromCronJob(ctx, clientset, namespace, o.cronJobName)
+	job, err := jobs.CreateFromCronJob(ctx, clientset, namespace, o.cronJobName, o.env)
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
+	jobs.PrintYAML(*job, os.Stderr)
 
 	var backgroundWaiter wait.Group
 	defer func() {
@@ -93,21 +94,19 @@ func run(o options) error {
 type options struct {
 	k8sFlags    *genericclioptions.ConfigFlags
 	cronJobName string
-}
-
-func (o *options) addFlags(f *pflag.FlagSet) {
-	o.k8sFlags.AddFlags(f)
-	f.StringVarP(&o.cronJobName, "cronjob-name", "", "", "Name of CronJob")
+	env         map[string]string
 }
 
 func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
-	flagSet := pflag.NewFlagSet("cronjob-runner", pflag.ContinueOnError)
 	var o options
+	pflag.StringVarP(&o.cronJobName, "cronjob-name", "", "", "Name of CronJob")
+	pflag.StringToStringVarP(&o.env, "env", "", nil, "Environment variables to set into the all containers")
 	o.k8sFlags = genericclioptions.NewConfigFlags(false)
-	o.addFlags(flagSet)
-	if err := flagSet.Parse(os.Args); err != nil {
-		log.Fatalf("Invalid flags: %s", err)
+	o.k8sFlags.AddFlags(pflag.CommandLine)
+	pflag.Parse()
+	if o.cronJobName == "" {
+		log.Fatalf("You need to set --cronjob-name")
 	}
 	if err := run(o); err != nil {
 		log.Fatalf("Error: %s", err)

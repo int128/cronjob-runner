@@ -30,3 +30,9 @@ jobs:
       - run: kubectl apply -f e2e_test
       - run: ./cronjob-runner --cronjob-name simple
       - run: ./cronjob-runner --cronjob-name multiple-containers
+      - run: ./cronjob-runner --cronjob-name conditional --env SHOULD_BE_TRUE=true
+      - run: |
+          set +e
+          set -x
+          ./cronjob-runner --cronjob-name conditional --env SHOULD_BE_TRUE=false
+          test $? -eq 1

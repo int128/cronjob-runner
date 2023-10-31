@@ -42,8 +42,17 @@ This command create a Job from the job template of CronJob.
 It shows the status of Job, Pods and containers.
 It follows the log streams of all containers.
 
+### Inject environment variables
+
+To inject environment variables to all containers,
+
+```shell
+cronjob-runner [--namespace your-namespace] --cronjob-name your-cronjob-name --env KEY=VALUE
+```
+
+Do not inject any secret, because anyone can see it by the log or kubectl command.
+
 ## Design
 
 For IaC and GitOps principal, every resource should be managed as code.
-This command creates a Job from the job template as-is.
-It does not allow any modification of the job template.
+This command does not allow any modification of the job template, except the environment variables.
