@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: simple
+  name: conditional
 spec:
   # run by cronjob-runner
   suspend: true
@@ -19,8 +19,5 @@ spec:
                 - bash
                 - -c
                 - |
-                  set -eux
-                  echo "Hello, world!"
-                  date
-                  uname -a
-                  exit 0
+                  set -ex
+                  test "${SHOULD_BE_TRUE}" = "true"
