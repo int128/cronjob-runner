@@ -29,4 +29,5 @@ jobs:
       - run: kind create cluster
       - run: kubectl apply -f e2e_test
       - run: ./cronjob-runner --cronjob-name simple
+      - run: ./cronjob-runner --cronjob-name simple --env FOO=bar
       - run: ./cronjob-runner --cronjob-name multiple-containers

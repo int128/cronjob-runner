@@ -23,4 +23,5 @@ spec:
                   echo "Hello, world!"
                   date
                   uname -a
+                  echo "FOO=$FOO"
                   exit 0
