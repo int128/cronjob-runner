@@ -25,6 +25,10 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: 1.21.3
+          # To reduce time of go build
+          cache-dependency-path: |
+            go.sum
+            **.go
       - run: go build .
       - run: kind create cluster
       - run: kubectl apply -f e2e_test
