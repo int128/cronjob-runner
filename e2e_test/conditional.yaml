@@ -8,7 +8,7 @@ spec:
   schedule: '@annually'
   jobTemplate:
     spec:
-      backoffLimit: 3
+      backoffLimit: 1
       template:
         spec:
           restartPolicy: Never
