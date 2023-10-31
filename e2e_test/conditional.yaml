@@ -19,5 +19,5 @@ spec:
                 - bash
                 - -c
                 - |
-                  set -ex
+                  set -eux
                   test "${SHOULD_BE_TRUE}" = "true"
