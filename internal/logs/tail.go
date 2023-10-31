@@ -3,6 +3,7 @@ package logs
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -10,20 +11,33 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
+// Tail tails the container log until the following cases:
+//   - Reached to EOF
+//   - The Pod is not found (already removed from Node)
+//   - The context is canceled
 func Tail(ctx context.Context, clientset *kubernetes.Clientset, namespace, podName, containerName string) {
-	log.Printf("Following the container log of %s/%s/%s", namespace, podName, containerName)
+	log.Printf("Tailing the container log of %s/%s/%s", namespace, podName, containerName)
 	var t tailer
 	for {
-		if err := t.resume(ctx, clientset, namespace, podName, containerName); err != nil {
-			log.Printf("Retrying to get the container log of %s/%s/%s: %s", namespace, podName, containerName, err)
-			time.Sleep(100 * time.Millisecond)
-			continue
+		err := t.resume(ctx, clientset, namespace, podName, containerName)
+		if err == nil {
+			return
 		}
-		return
+		if kerrors.IsNotFound(err) {
+			log.Printf("Pod %s/%s was deleted before reached to EOF of the container log: %s", namespace, podName, err)
+			return
+		}
+		if errors.Is(err, context.Canceled) {
+			log.Printf("Stopped tailing the container log of %s/%s/%s before reached to EOF: %s", namespace, podName, containerName, err)
+			return
+		}
+		log.Printf("Retrying to tail the container log of %s/%s/%s: %s", namespace, podName, containerName, err)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
