@@ -16,4 +16,11 @@ spec:
             - name: example
               image: debian:stable
               command:
-                - date
+                - bash
+                - -c
+                - |
+                  set -eux
+                  echo "Hello, world!"
+                  date
+                  uname -a
+                  exit 0

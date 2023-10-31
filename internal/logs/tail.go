@@ -28,7 +28,7 @@ func Tail(ctx context.Context, clientset *kubernetes.Clientset, namespace, podNa
 }
 
 type tailer struct {
-	lastTimestamp *metav1.Time
+	lastLogTime *metav1.Time
 }
 
 func (t *tailer) resume(ctx context.Context, clientset *kubernetes.Clientset, namespace, podName, containerName string) error {
@@ -36,7 +36,7 @@ func (t *tailer) resume(ctx context.Context, clientset *kubernetes.Clientset, na
 		Container:  containerName,
 		Follow:     true,
 		Timestamps: true,
-		SinceTime:  t.lastTimestamp,
+		SinceTime:  t.lastLogTime,
 	}).Stream(ctx)
 	if err != nil {
 		return fmt.Errorf("stream error: %w", err)
@@ -47,10 +47,9 @@ func (t *tailer) resume(ctx context.Context, clientset *kubernetes.Clientset, na
 	for {
 		line, err := reader.ReadString('\n')
 		if line != "" {
-			timestamp, message := parseTimestamp(line)
-			fmt.Printf("%s | %s/%s/%s | %s",
-				timestamp.Format(time.RFC3339), namespace, podName, containerName, message)
-			t.lastTimestamp = timestamp
+			rawTimestamp, metaTime, message := parseTimestamp(line)
+			fmt.Printf("%s | %s/%s/%s | %s", rawTimestamp, namespace, podName, containerName, message)
+			t.lastLogTime = metaTime
 		}
 		if err == io.EOF {
 			return nil
@@ -61,17 +60,17 @@ func (t *tailer) resume(ctx context.Context, clientset *kubernetes.Clientset, na
 	}
 }
 
-func parseTimestamp(line string) (*metav1.Time, string) {
+func parseTimestamp(line string) (string, *metav1.Time, string) {
 	s := strings.SplitN(line, " ", 2)
 	if len(s) != 2 {
-		return nil, line
+		return "", nil, line
 	}
-	timestamp, message := s[0], s[1]
-	t, err := time.Parse(time.RFC3339, timestamp)
+	rawTimestamp, message := s[0], s[1]
+	t, err := time.Parse(time.RFC3339, rawTimestamp)
 	if err != nil {
 		log.Printf("Internal error: invalid log timestamp: %s", err)
-		return nil, line
+		return "", nil, line
 	}
-	mt := metav1.NewTime(t)
-	return &mt, message
+	metaTime := metav1.NewTime(t)
+	return rawTimestamp, &metaTime, message
 }
