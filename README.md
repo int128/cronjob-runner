@@ -1,7 +1,7 @@
 # cronjob-runner [![go](https://github.com/int128/cronjob-runner/actions/workflows/go.yaml/badge.svg)](https://github.com/int128/cronjob-runner/actions/workflows/go.yaml)
 
 This is a command to run a `Job` from `CronJob` in Kubernetes.
-It is designed for running a one-shot job by a job infrastructure such as GitHub Actions or Jenkins.
+It is designed for running a one-shot job by yet another job infrastructure such as GitHub Actions or Jenkins.
 
 ## Getting Started
 
@@ -11,7 +11,8 @@ To run a Job from the CronJob,
 cronjob-runner [--namespace your-namespace] --cronjob-name your-cronjob-name
 ```
 
-Here is an example output of [simple CronJob](e2e_test/simple.yaml).
+Here is an example with a [simple CronJob](e2e_test/simple.yaml).
+You can see the actual outputs from [e2e-test workflow](https://github.com/int128/cronjob-runner/actions/workflows/e2e-test.yaml?query=branch%3Amain).
 
 ```console
 $ cronjob-runner --cronjob-name simple
@@ -20,67 +21,7 @@ $ cronjob-runner --cronjob-name simple
 04:03:14.751085 create.go:47: Created a Job default/simple-xv2g4
 apiVersion: batch/v1
 kind: Job
-metadata:
-  annotations:
-    batch.kubernetes.io/job-tracking: ""
-  creationTimestamp: "2023-10-31T04:03:14Z"
-  generateName: simple-
-  generation: 1
-  labels:
-    batch.kubernetes.io/controller-uid: d36873c5-e4e2-49ae-9f95-ce8c4858974f
-    batch.kubernetes.io/job-name: simple-xv2g4
-    controller-uid: d36873c5-e4e2-49ae-9f95-ce8c4858974f
-    job-name: simple-xv2g4
-  name: simple-xv2g4
-  namespace: default
-  ownerReferences:
-  - apiVersion: batch/v1
-    controller: true
-    kind: CronJob
-    name: simple
-    uid: 245bc058-c6f4-406b-91e5-f2bb70481d4d
-  resourceVersion: "312"
-  uid: d36873c5-e4e2-49ae-9f95-ce8c4858974f
-spec:
-  backoffLimit: 3
-  completionMode: NonIndexed
-  completions: 1
-  parallelism: 1
-  selector:
-    matchLabels:
-      batch.kubernetes.io/controller-uid: d36873c5-e4e2-49ae-9f95-ce8c4858974f
-  suspend: false
-  template:
-    metadata:
-      creationTimestamp: null
-      labels:
-        batch.kubernetes.io/controller-uid: d36873c5-e4e2-49ae-9f95-ce8c4858974f
-        batch.kubernetes.io/job-name: simple-xv2g4
-        controller-uid: d36873c5-e4e2-49ae-9f95-ce8c4858974f
-        job-name: simple-xv2g4
-    spec:
-      containers:
-      - command:
-        - bash
-        - -c
-        - |
-          set -eux
-          echo "Hello, world!"
-          date
-          uname -a
-          exit 0
-        image: debian:stable
-        imagePullPolicy: IfNotPresent
-        name: example
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-      dnsPolicy: ClusterFirst
-      restartPolicy: Never
-      schedulerName: default-scheduler
-      securityContext: {}
-      terminationGracePeriodSeconds: 30
-status: {}
+# ...snip...
 04:03:14.751671 informer.go:41: Watching a pod of job default/simple-xv2g4
 04:03:14.751708 informer.go:36: Watching the job default/simple-xv2g4
 04:03:14.756822 informer.go:47: Job default/simple-xv2g4 is created
@@ -101,9 +42,12 @@ status: {}
 04:03:37.855034 main.go:53: Stopped background workers
 ```
 
-This command create a Job from the job template of CronJob.
-It shows the status of Job, Pods and containers.
-It follows the log streams of all containers.
+This command runs a job as follows:
+
+- Create a Job from the job template of CronJob.
+- Show the statuses of Job, Pod(s) and container(s) when changed.
+- Tail the log streams of all containers.
+- If the job is succeeded, exit with code 0. Otherwise, exit with code 1.
 
 ### Inject environment variables
 
@@ -126,15 +70,16 @@ Do not inject any secret, because anyone can see it by the log or kubectl comman
 ### Owner references
 
 This command sets the owner reference of a Job to the parent CronJob.
-Here is the relationship of resources.
+Here is the relationship of ownership.
 
 ```mermaid
 graph LR
   CronJob --> Job --> Pod
 ```
 
-When a Job is completed or failed, the old Job will be cleaned up by CronJob controller.
-See [Jobs section of the official document](https://kubernetes.io/docs/concepts/workloads/controllers/job/) for details.
+When a Job is completed or failed, CronJob controller will clean up the outdated Jobs
+if `spec.successfulJobsHistoryLimit` or `spec.failedJobsHistoryLimit` is set.
+See [CronJob section of the official document](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) for details.
 
 ### Less runtime injection
 
