@@ -47,8 +47,9 @@ type tailer struct {
 
 func (t *tailer) resume(ctx context.Context, clientset *kubernetes.Clientset, namespace, podName, containerName string) error {
 	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container:  containerName,
-		Follow:     true,
+		Container: containerName,
+		Follow:    true,
+		// Get the timestamp to resume from the last point when the connection is lost.
 		Timestamps: true,
 		SinceTime:  t.lastLogTime,
 	}).Stream(ctx)
@@ -74,6 +75,8 @@ func (t *tailer) resume(ctx context.Context, clientset *kubernetes.Clientset, na
 	}
 }
 
+// parseTimestamp returns the timestamp and message of the log line.
+// If it cannot parse the timestamp, it returns the whole line.
 func parseTimestamp(line string) (string, *metav1.Time, string) {
 	s := strings.SplitN(line, " ", 2)
 	if len(s) != 2 {

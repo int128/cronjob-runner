@@ -48,18 +48,20 @@ func run(o options) error {
 
 	var backgroundWaiter wait.Group
 	defer func() {
-		// This must be run after all of defer close()
+		// This must be run after close(chan) to avoid deadlock
 		backgroundWaiter.Wait()
 		log.Printf("Stopped background workers")
 	}()
+
 	jobFinishedCh := make(chan batchv1.JobConditionType)
 	defer close(jobFinishedCh)
 	stopCh := make(chan struct{})
 	defer close(stopCh)
-
 	containerStartedCh := make(chan pods.ContainerStartedEvent)
 	defer close(containerStartedCh)
+
 	backgroundWaiter.Start(func() {
+		// When a container is started, tail the container logs.
 		for event := range containerStartedCh {
 			event := event
 			backgroundWaiter.Start(func() {
@@ -72,7 +74,6 @@ func run(o options) error {
 		return fmt.Errorf("could not start the pod informer: %w", err)
 	}
 	backgroundWaiter.Start(podInformer.Shutdown)
-
 	jobInformer, err := jobs.StartInformer(clientset, job.Namespace, job.Name, stopCh, jobFinishedCh)
 	if err != nil {
 		return fmt.Errorf("could not start the job informer: %w", err)
