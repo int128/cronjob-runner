@@ -11,6 +11,22 @@ To run a Job from the CronJob,
 cronjob-runner [--namespace your-namespace] --cronjob-name your-cronjob-name
 ```
 
+Create a CronJob before running a Job.
+You can set `suspend` field to prevent CronJob controller from scheduling.
+Here is an example for a one-shot job.
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+spec:
+  # NOTE: This is a one-shot job to be run by cronjob-runner.
+  # Do not enable scheduling.
+  suspend: true
+  schedule: '@annually'
+  jobTemplate:
+    spec: # ...snip...
+```
+
 Here is an example with a [simple CronJob](e2e_test/simple.yaml).
 You can see the actual outputs from [e2e-test workflow](https://github.com/int128/cronjob-runner/actions/workflows/e2e-test.yaml?query=branch%3Amain).
 
