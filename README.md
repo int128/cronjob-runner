@@ -5,6 +5,9 @@ It is designed for running a one-shot job by yet another job infrastructure such
 
 ## Getting Started
 
+You can download the latest release from [GitHub Releases](https://github.com/int128/cronjob-runner/releases).
+As well as you can install it by `go install github.com/int128/cronjob-runner@latest`.
+
 To run a Job from the CronJob,
 
 ```shell
@@ -28,7 +31,6 @@ spec:
 ```
 
 Here is an example with a [simple CronJob](e2e_test/simple.yaml).
-You can see the actual outputs from [e2e-test workflow](https://github.com/int128/cronjob-runner/actions/workflows/e2e-test.yaml?query=branch%3Amain).
 
 ```console
 $ cronjob-runner --cronjob-name simple
@@ -57,6 +59,8 @@ kind: Job
 04:03:37.854908 informer.go:56: Job default/simple-xv2g4 is Complete 
 04:03:37.855034 main.go:53: Stopped background workers
 ```
+
+You can see the actual examples from [e2e-test workflow](https://github.com/int128/cronjob-runner/actions/workflows/e2e-test.yaml?query=branch%3Amain).
 
 This command runs a job as follows:
 
