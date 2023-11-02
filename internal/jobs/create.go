@@ -40,6 +40,8 @@ func CreateFromCronJob(
 				UID:        cronJob.GetUID(),
 				Controller: pointer.Bool(true),
 			}},
+			Labels:      cronJob.Spec.JobTemplate.Labels,
+			Annotations: cronJob.Spec.JobTemplate.Annotations,
 		},
 		Spec: appendEnv(cronJob.Spec.JobTemplate.Spec, env),
 	}
