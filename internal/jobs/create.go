@@ -18,7 +18,7 @@ import (
 // If env is given, it injects the environment variables to all containers.
 func CreateFromCronJob(
 	ctx context.Context,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	namespace, cronJobName string,
 	env map[string]string,
 ) (*batchv1.Job, error) {
