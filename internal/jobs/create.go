@@ -14,6 +14,8 @@ import (
 	"k8s.io/utils/pointer"
 )
 
+// CreateFromCronJob creates a job from the CronJob template.
+// If env is given, it injects the environment variables to all containers.
 func CreateFromCronJob(
 	ctx context.Context,
 	clientset *kubernetes.Clientset,
@@ -30,6 +32,7 @@ func CreateFromCronJob(
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    cronJob.Namespace,
 			GenerateName: fmt.Sprintf("%s-", cronJob.Name),
+			// Set the owner reference to clean up the outdated jobs by CronJob controller.
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: batchv1.SchemeGroupVersion.String(),
 				Kind:       "CronJob",

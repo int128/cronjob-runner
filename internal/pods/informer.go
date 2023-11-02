@@ -15,12 +15,17 @@ type Informer interface {
 	Shutdown()
 }
 
+// ContainerStartedEvent is sent when the container is started.
 type ContainerStartedEvent struct {
 	Namespace     string
 	PodName       string
 	ContainerName string
 }
 
+// StartInformer an informer to receive the change of pod resource.
+// It finds the corresponding pod(s) by job name.
+// You must finally close stopCh to stop the informer.
+// When the status of container is changed, the event is sent to containerStartedCh.
 func StartInformer(
 	clientset *kubernetes.Clientset,
 	namespace, jobName string,
@@ -94,9 +99,10 @@ func (h *eventHandler) notifyContainerStarted(namespace, podName string, oldStat
 	for _, change := range containerStateChanges {
 		oldState := getContainerState(change.oldStatus)
 		newState := getContainerState(change.newStatus)
-		// Waiting -> Running
-		// Waiting -> Terminated
-		// Terminated -> Running
+		// Send an event to the channel on the following changes:
+		// - Waiting -> Running
+		// - Waiting -> Terminated
+		// - Terminated -> Running
 		if (oldState == "Waiting" && newState != "Waiting") || (oldState == "Terminated" && newState == "Running") {
 			h.containerStartedCh <- ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
 		}

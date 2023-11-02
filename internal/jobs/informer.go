@@ -16,6 +16,9 @@ type Informer interface {
 	Shutdown()
 }
 
+// StartInformer starts an informer to receive the change of job resource.
+// You must finally close stopCh to stop the informer.
+// When the job is completed or failed, it is sent to finishedCh.
 func StartInformer(
 	clientset *kubernetes.Clientset,
 	namespace, jobName string,
@@ -38,7 +41,6 @@ func StartInformer(
 }
 
 type eventHandler struct {
-	// sent when the job is completed or failed
 	finishedCh chan<- batchv1.JobConditionType
 }
 
