@@ -1,12 +1,135 @@
 package jobs
 
 import (
+	"context"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/pointer"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 )
+
+func TestCreateFromCronJob(t *testing.T) {
+	t.Run("as-is", func(t *testing.T) {
+		clientset := fake.NewSimpleClientset(
+			&batchv1.CronJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "example-cronjob",
+				},
+				Spec: batchv1.CronJobSpec{
+					Suspend:  pointer.Bool(true),
+					Schedule: "@annual",
+					JobTemplate: batchv1.JobTemplateSpec{
+						Spec: batchv1.JobSpec{
+							BackoffLimit: pointer.Int32(1),
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{{
+										Name: "example-container",
+									}},
+								},
+							},
+						},
+					},
+				},
+			},
+		)
+		gotJob, err := CreateFromCronJob(context.TODO(), clientset, "default", "example-cronjob", nil)
+		if err != nil {
+			t.Fatalf("CreateFromCronJob error: %s", err)
+		}
+		wantJob := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    "default",
+				GenerateName: "example-cronjob-",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "batch/v1",
+					Kind:       "CronJob",
+					Name:       "example-cronjob",
+					Controller: pointer.Bool(true),
+				}},
+			},
+			Spec: batchv1.JobSpec{
+				BackoffLimit: pointer.Int32(1),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: "example-container",
+						}},
+					},
+				},
+			},
+		}
+		if diff := cmp.Diff(wantJob, gotJob); diff != "" {
+			t.Errorf("job mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("env is given", func(t *testing.T) {
+		clientset := fake.NewSimpleClientset(
+			&batchv1.CronJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "example-cronjob",
+				},
+				Spec: batchv1.CronJobSpec{
+					Suspend:  pointer.Bool(true),
+					Schedule: "@annual",
+					JobTemplate: batchv1.JobTemplateSpec{
+						Spec: batchv1.JobSpec{
+							BackoffLimit: pointer.Int32(1),
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{{
+										Name: "example-container",
+									}},
+								},
+							},
+						},
+					},
+				},
+			},
+		)
+		gotJob, err := CreateFromCronJob(context.TODO(), clientset, "default", "example-cronjob",
+			map[string]string{"FOO": "bar"})
+		if err != nil {
+			t.Fatalf("CreateFromCronJob error: %s", err)
+		}
+		wantJob := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    "default",
+				GenerateName: "example-cronjob-",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "batch/v1",
+					Kind:       "CronJob",
+					Name:       "example-cronjob",
+					Controller: pointer.Bool(true),
+				}},
+			},
+			Spec: batchv1.JobSpec{
+				BackoffLimit: pointer.Int32(1),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: "example-container",
+							Env: []corev1.EnvVar{{
+								Name:  "FOO",
+								Value: "bar",
+							}},
+						}},
+					},
+				},
+			},
+		}
+		if diff := cmp.Diff(wantJob, gotJob); diff != "" {
+			t.Errorf("job mismatch (-want +got):\n%s", diff)
+		}
+	})
+}
 
 func Test_appendEnv(t *testing.T) {
 	jobSpecWithEnv := batchv1.JobSpec{
