@@ -49,7 +49,9 @@ func ApplyOwnerReference(
 			UID:        &job.UID,
 		},
 	)
-	secret, err := clientset.CoreV1().Secrets(namespace).Apply(ctx, secretApplyConfiguration, metav1.ApplyOptions{})
+	secret, err := clientset.CoreV1().Secrets(namespace).Apply(ctx, secretApplyConfiguration, metav1.ApplyOptions{
+		FieldManager: "cronjob-runner",
+	})
 	if err != nil {
 		return nil, fmt.Errorf("apply error: %w", err)
 	}

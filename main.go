@@ -46,13 +46,12 @@ func run(o options) error {
 	if err != nil {
 		return fmt.Errorf("could not create a Secret for Job: %w", err)
 	}
-	defer func() {
+	defer func(secretName string) {
 		// root ctx may be canceled at this time
-		ctx := context.Background()
-		if err := secrets.Delete(ctx, clientset, namespace, secret.Name); err != nil {
+		if err := secrets.Delete(context.Background(), clientset, namespace, secretName); err != nil {
 			log.Printf("Could not delete the Secret: %s", err)
 		}
-	}()
+	}(secret.Name)
 
 	job, err := jobs.CreateFromCronJob(ctx, clientset, namespace, o.cronJobName, jobs.CreateOptions{
 		Env:       o.env,
