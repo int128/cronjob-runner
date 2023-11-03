@@ -24,6 +24,10 @@ func TestCreateFromCronJob(t *testing.T) {
 					Suspend:  pointer.Bool(true),
 					Schedule: "@annual",
 					JobTemplate: batchv1.JobTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels:      map[string]string{"my/label": "foo"},
+							Annotations: map[string]string{"my/annotation": "bar"},
+						},
 						Spec: batchv1.JobSpec{
 							BackoffLimit: pointer.Int32(1),
 							Template: corev1.PodTemplateSpec{
@@ -52,6 +56,8 @@ func TestCreateFromCronJob(t *testing.T) {
 					Name:       "example-cronjob",
 					Controller: pointer.Bool(true),
 				}},
+				Labels:      map[string]string{"my/label": "foo"},
+				Annotations: map[string]string{"my/annotation": "bar"},
 			},
 			Spec: batchv1.JobSpec{
 				BackoffLimit: pointer.Int32(1),

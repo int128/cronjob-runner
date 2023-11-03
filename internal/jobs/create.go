@@ -28,7 +28,7 @@ func CreateFromCronJob(
 	}
 	log.Printf("Found the CronJob %s/%s", cronJob.Namespace, cronJob.Name)
 
-	jobTemplate := batchv1.Job{
+	jobToCreate := batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    cronJob.Namespace,
 			GenerateName: fmt.Sprintf("%s-", cronJob.Name),
@@ -40,10 +40,12 @@ func CreateFromCronJob(
 				UID:        cronJob.GetUID(),
 				Controller: pointer.Bool(true),
 			}},
+			Labels:      cronJob.Spec.JobTemplate.Labels,
+			Annotations: cronJob.Spec.JobTemplate.Annotations,
 		},
 		Spec: appendEnv(cronJob.Spec.JobTemplate.Spec, env),
 	}
-	job, err := clientset.BatchV1().Jobs(namespace).Create(ctx, &jobTemplate, metav1.CreateOptions{})
+	job, err := clientset.BatchV1().Jobs(namespace).Create(ctx, &jobToCreate, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("create error: %w", err)
 	}
