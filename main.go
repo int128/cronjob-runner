@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/int128/cronjob-runner/internal/secrets"
+	corev1 "k8s.io/api/core/v1"
 	"log"
 	"os"
 	"os/signal"
@@ -40,11 +42,32 @@ func run(o options) error {
 	}
 	log.Printf("Cluster version %s", serverVersion)
 
-	job, err := jobs.CreateFromCronJob(ctx, clientset, namespace, o.cronJobName, o.env)
+	secret, err := secrets.Create(ctx, clientset, namespace, o.cronJobName, o.secretEnvsToMap())
+	if err != nil {
+		return fmt.Errorf("could not create a Secret for Job: %w", err)
+	}
+	defer func() {
+		// root ctx may be canceled at this time
+		ctx := context.Background()
+		if err := secrets.Delete(ctx, clientset, namespace, secret.Name); err != nil {
+			log.Printf("Could not delete the Secret: %s", err)
+		}
+	}()
+
+	job, err := jobs.CreateFromCronJob(ctx, clientset, namespace, o.cronJobName, jobs.CreateOptions{
+		Env:       o.env,
+		SecretEnv: o.secretEnv,
+		Secret:    corev1.LocalObjectReference{Name: secret.Name},
+	})
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
 	jobs.PrintYAML(*job, os.Stderr)
+
+	secret, err = secrets.ApplyOwnerReference(ctx, clientset, namespace, secret.Name, job)
+	if err != nil {
+		return fmt.Errorf("could not apply the owner reference to the Secret: %w", err)
+	}
 
 	var backgroundWaiter wait.Group
 	defer func() {
@@ -96,13 +119,25 @@ type options struct {
 	k8sFlags    *genericclioptions.ConfigFlags
 	cronJobName string
 	env         map[string]string
+	secretEnv   []string
+}
+
+func (o options) secretEnvsToMap() map[string]string {
+	secretEnvMap := make(map[string]string)
+	for _, env := range o.secretEnv {
+		secretEnvMap[env] = os.Getenv(env)
+	}
+	return secretEnvMap
 }
 
 func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
 	var o options
 	pflag.StringVarP(&o.cronJobName, "cronjob-name", "", "", "Name of CronJob")
-	pflag.StringToStringVarP(&o.env, "env", "", nil, "Environment variables to set into the all containers")
+	pflag.StringToStringVar(&o.env, "env", nil,
+		"Environment variables to set into the all containers, in the form of KEY=VALUE")
+	pflag.StringArrayVar(&o.secretEnv, "secret-env", nil,
+		"Environment variables of secrets to set into the all containers, in the form of KEY")
 	o.k8sFlags = genericclioptions.NewConfigFlags(false)
 	o.k8sFlags.AddFlags(pflag.CommandLine)
 	pflag.Parse()

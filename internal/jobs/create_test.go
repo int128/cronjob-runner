@@ -42,7 +42,8 @@ func TestCreateFromCronJob(t *testing.T) {
 				},
 			},
 		)
-		gotJob, err := CreateFromCronJob(context.TODO(), clientset, "default", "example-cronjob", nil)
+		gotJob, err := CreateFromCronJob(context.TODO(), clientset, "default", "example-cronjob",
+			CreateOptions{})
 		if err != nil {
 			t.Fatalf("CreateFromCronJob error: %s", err)
 		}
@@ -101,7 +102,7 @@ func TestCreateFromCronJob(t *testing.T) {
 			},
 		)
 		gotJob, err := CreateFromCronJob(context.TODO(), clientset, "default", "example-cronjob",
-			map[string]string{"FOO": "bar"})
+			CreateOptions{Env: map[string]string{"FOO": "bar"}})
 		if err != nil {
 			t.Fatalf("CreateFromCronJob error: %s", err)
 		}
