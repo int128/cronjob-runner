@@ -20,7 +20,7 @@ type Informer interface {
 // You must finally close stopCh to stop the informer.
 // When the job is completed or failed, it is sent to finishedCh.
 func StartInformer(
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	namespace, jobName string,
 	stopCh <-chan struct{},
 	finishedCh chan<- batchv1.JobConditionType,
