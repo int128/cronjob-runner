@@ -114,7 +114,10 @@ func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
 	var o options
 	pflag.StringVar(&o.cronJobName, "cronjob-name", "", "Name of CronJob")
-	pflag.StringToStringVar(&o.env, "env", nil, "Environment variables to set into the all containers")
+	pflag.StringToStringVar(&o.env, "env", nil,
+		"Environment variables to set into the all containers, in the form of KEY=VALUE")
+	pflag.StringArrayVar(&o.secretEnv, "secret-env", nil,
+		"Environment variables of secrets to set into the all containers, in the form of KEY")
 	kubernetesFlags := genericclioptions.NewConfigFlags(false)
 	kubernetesFlags.AddFlags(pflag.CommandLine)
 	pflag.Parse()
