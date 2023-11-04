@@ -17,30 +17,18 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func run(o options) error {
+type options struct {
+	namespace   string
+	cronJobName string
+	env         map[string]string
+}
+
+func run(clientset kubernetes.Interface, o options) error {
 	ctx := context.Background()
 	ctx, stopNotifyCtx := signal.NotifyContext(ctx, os.Interrupt)
 	defer stopNotifyCtx()
 
-	restCfg, err := o.k8sFlags.ToRESTConfig()
-	if err != nil {
-		return fmt.Errorf("could not load the config: %w", err)
-	}
-	namespace, _, err := o.k8sFlags.ToRawKubeConfigLoader().Namespace()
-	if err != nil {
-		return fmt.Errorf("could not determine the namespace: %w", err)
-	}
-	clientset, err := kubernetes.NewForConfig(restCfg)
-	if err != nil {
-		return fmt.Errorf("could not create a Kubernetes client: %w", err)
-	}
-	serverVersion, err := clientset.ServerVersion()
-	if err != nil {
-		return fmt.Errorf("could not get the server version: %w", err)
-	}
-	log.Printf("Cluster version %s", serverVersion)
-
-	job, err := jobs.CreateFromCronJob(ctx, clientset, namespace, o.cronJobName, o.env)
+	job, err := jobs.CreateFromCronJob(ctx, clientset, o.namespace, o.cronJobName, o.env)
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
@@ -92,24 +80,32 @@ func run(o options) error {
 	}
 }
 
-type options struct {
-	k8sFlags    *genericclioptions.ConfigFlags
-	cronJobName string
-	env         map[string]string
-}
-
 func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
 	var o options
-	pflag.StringVarP(&o.cronJobName, "cronjob-name", "", "", "Name of CronJob")
-	pflag.StringToStringVarP(&o.env, "env", "", nil, "Environment variables to set into the all containers")
-	o.k8sFlags = genericclioptions.NewConfigFlags(false)
-	o.k8sFlags.AddFlags(pflag.CommandLine)
+	pflag.StringVar(&o.cronJobName, "cronjob-name", "", "Name of CronJob")
+	pflag.StringToStringVar(&o.env, "env", nil, "Environment variables to set into the all containers")
+	kubernetesFlags := genericclioptions.NewConfigFlags(false)
+	kubernetesFlags.AddFlags(pflag.CommandLine)
 	pflag.Parse()
 	if o.cronJobName == "" {
 		log.Fatalf("You need to set --cronjob-name")
 	}
-	if err := run(o); err != nil {
+
+	restCfg, err := kubernetesFlags.ToRESTConfig()
+	if err != nil {
+		log.Fatalf("Could not load the Kubernetes config: %s", err)
+	}
+	clientset, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		log.Fatalf("Could not create a Kubernetes client: %s", err)
+	}
+	o.namespace, _, err = kubernetesFlags.ToRawKubeConfigLoader().Namespace()
+	if err != nil {
+		log.Fatalf("Could not determine the namespace: %s", err)
+	}
+
+	if err := run(clientset, o); err != nil {
 		log.Fatalf("Error: %s", err)
 	}
 }

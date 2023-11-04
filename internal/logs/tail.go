@@ -20,7 +20,7 @@ import (
 //   - Reached to EOF
 //   - The Pod is not found (already removed from Node)
 //   - The context is canceled
-func Tail(ctx context.Context, clientset *kubernetes.Clientset, namespace, podName, containerName string) {
+func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) {
 	log.Printf("Tailing the container log of %s/%s/%s", namespace, podName, containerName)
 	var t tailer
 	for {
@@ -45,7 +45,7 @@ type tailer struct {
 	lastLogTime *metav1.Time
 }
 
-func (t *tailer) resume(ctx context.Context, clientset *kubernetes.Clientset, namespace, podName, containerName string) error {
+func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) error {
 	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: containerName,
 		Follow:    true,
