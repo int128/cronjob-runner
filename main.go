@@ -106,6 +106,6 @@ func main() {
 	}
 
 	if err := run(clientset, o); err != nil {
-		log.Printf("Error: %s", err)
+		log.Fatalf("Error: %s", err)
 	}
 }
