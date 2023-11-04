@@ -60,8 +60,7 @@ func run(clientset kubernetes.Interface, o options) error {
 	}
 	jobs.PrintYAML(*job, os.Stderr)
 
-	secret, err = secrets.ApplyOwnerReference(ctx, clientset, o.namespace, secret.Name, job)
-	if err != nil {
+	if _, err := secrets.ApplyOwnerReference(ctx, clientset, o.namespace, secret.Name, job); err != nil {
 		return fmt.Errorf("could not apply the owner reference to the Secret: %w", err)
 	}
 
