@@ -27,7 +27,7 @@ type ContainerStartedEvent struct {
 // You must finally close stopCh to stop the informer.
 // When the status of container is changed, the event is sent to containerStartedCh.
 func StartInformer(
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	namespace, jobName string,
 	stopCh <-chan struct{},
 	containerStartedCh chan<- ContainerStartedEvent,
