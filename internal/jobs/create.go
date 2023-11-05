@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,7 +26,10 @@ func CreateFromCronJob(
 	if err != nil {
 		return nil, fmt.Errorf("get error: %w", err)
 	}
-	log.Printf("Found the CronJob %s/%s", cronJob.Namespace, cronJob.Name)
+	slog.Info("Found the CronJob",
+		slog.Group("cronJob",
+			slog.String("namespace", cronJob.Namespace),
+			slog.String("name", cronJob.Name)))
 
 	jobToCreate := batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -49,7 +52,10 @@ func CreateFromCronJob(
 	if err != nil {
 		return nil, fmt.Errorf("create error: %w", err)
 	}
-	log.Printf("Created a Job %s/%s", job.Namespace, job.Name)
+	slog.Info("Created a Job",
+		slog.Group("job",
+			slog.String("namespace", job.Namespace),
+			slog.String("name", job.Name)))
 	return job, nil
 }
 
@@ -82,6 +88,6 @@ func PrintYAML(job batchv1.Job, w io.Writer) {
 	newJob.ObjectMeta.SetManagedFields(nil)
 	var printer printers.YAMLPrinter
 	if err := printer.PrintObj(newJob, w); err != nil {
-		log.Printf("Internal error: printer.PrintObj: %s", err)
+		slog.Warn("Internal error: printer.PrintObj", "error", err)
 	}
 }

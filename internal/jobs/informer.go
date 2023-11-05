@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -36,7 +36,10 @@ func StartInformer(
 		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
 	}
 	informerFactory.Start(stopCh)
-	log.Printf("Watching the job %s/%s", namespace, jobName)
+	slog.Info("Watching Job",
+		slog.Group("job",
+			slog.String("namespace", namespace),
+			slog.String("name", jobName)))
 	return informerFactory, nil
 }
 
@@ -44,9 +47,19 @@ type eventHandler struct {
 	finishedCh chan<- batchv1.JobConditionType
 }
 
-func (h *eventHandler) OnAdd(obj interface{}, _ bool) {
+func (h *eventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 	job := obj.(*batchv1.Job)
-	log.Printf("Job %s/%s is created", job.Namespace, job.Name)
+	if isInInitialList {
+		slog.Info("Job is found",
+			slog.Group("job",
+				slog.String("namespace", job.Namespace),
+				slog.String("name", job.Name)))
+		return
+	}
+	slog.Info("Job is created",
+		slog.Group("job",
+			slog.String("namespace", job.Namespace),
+			slog.String("name", job.Name)))
 }
 
 func (h *eventHandler) OnUpdate(_, newObj interface{}) {
@@ -55,9 +68,43 @@ func (h *eventHandler) OnUpdate(_, newObj interface{}) {
 	if condition == nil {
 		return
 	}
-	log.Printf("Job %s/%s is %s %s", job.Namespace, job.Name, condition.Type, formatConditionMessage(condition))
-	if condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed {
+	switch condition.Type {
+	case batchv1.JobComplete:
+		slog.Info("Job is completed",
+			slog.Group("job",
+				slog.String("namespace", job.Namespace),
+				slog.String("name", job.Name),
+			),
+			slog.Group("condition",
+				slog.Any("type", condition.Type),
+				slog.String("reason", condition.Reason),
+				slog.String("message", condition.Message),
+			))
 		h.finishedCh <- condition.Type
+
+	case batchv1.JobFailed:
+		slog.Info("Job is failed",
+			slog.Group("job",
+				slog.String("namespace", job.Namespace),
+				slog.String("name", job.Name),
+			),
+			slog.Group("condition",
+				slog.String("reason", condition.Reason),
+				slog.String("message", condition.Message),
+			))
+		h.finishedCh <- condition.Type
+
+	default:
+		slog.Info("Job condition is changed",
+			slog.Group("job",
+				slog.String("namespace", job.Namespace),
+				slog.String("name", job.Name),
+			),
+			slog.Group("condition",
+				slog.Any("type", condition.Type),
+				slog.String("reason", condition.Reason),
+				slog.String("message", condition.Message),
+			))
 	}
 }
 
@@ -70,17 +117,10 @@ func findCondition(job *batchv1.Job) *batchv1.JobCondition {
 	return nil
 }
 
-func formatConditionMessage(condition *batchv1.JobCondition) string {
-	if condition.Message == "" && condition.Reason == "" {
-		return ""
-	}
-	if condition.Message == "" {
-		return fmt.Sprintf("(%s)", condition.Reason)
-	}
-	return fmt.Sprintf("(%s: %s)", condition.Reason, condition.Message)
-}
-
 func (h *eventHandler) OnDelete(obj interface{}) {
 	job := obj.(*batchv1.Job)
-	log.Printf("Job %s/%s is deleted", job.Namespace, job.Name)
+	slog.Info("Job is deleted",
+		slog.Group("job",
+			slog.String("namespace", job.Namespace),
+			slog.String("name", job.Name)))
 }

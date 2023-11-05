@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 
@@ -38,7 +39,7 @@ func run(clientset kubernetes.Interface, o options) error {
 	defer func() {
 		// This must be run after close(chan) to avoid deadlock
 		backgroundWaiter.Wait()
-		log.Printf("Stopped background workers")
+		slog.Info("Stopped background workers")
 	}()
 
 	jobFinishedCh := make(chan batchv1.JobConditionType)
@@ -75,7 +76,7 @@ func run(clientset kubernetes.Interface, o options) error {
 		}
 		return nil
 	case <-ctx.Done():
-		log.Printf("Shutting down: %s", ctx.Err())
+		slog.Info("Shutting down")
 		return ctx.Err()
 	}
 }
