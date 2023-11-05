@@ -109,7 +109,7 @@ func findChangedConditionsToTrue(oldConditions, newConditions []batchv1.JobCondi
 	for conditionType := range newMap {
 		oldCondition := oldMap[conditionType]
 		newCondition := newMap[conditionType]
-		if oldCondition.Status != corev1.ConditionTrue && newCondition.Status == corev1.ConditionTrue {
+		if oldCondition.Status != newCondition.Status && newCondition.Status == corev1.ConditionTrue {
 			changedMap[conditionType] = newCondition
 		}
 	}
