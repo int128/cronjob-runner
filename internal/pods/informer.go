@@ -119,18 +119,17 @@ func (h *eventHandler) notifyContainerStatusChanges(namespace, podName string, o
 		)
 		containerAttr := slog.Group("container",
 			slog.String("name", change.newStatus.Name),
-			slog.String("state", change.newState),
 		)
 		switch change.newState {
-		case "Waiting":
+		case containerStateWaiting:
 			waiting := change.newStatus.State.Waiting
 			slog.Info("Container is waiting", podAttr, containerAttr,
 				slog.String("reason", waiting.Reason),
 				slog.String("message", waiting.Message),
 			)
-		case "Running":
+		case containerStateRunning:
 			slog.Info("Container is running", podAttr, containerAttr)
-		case "Terminated":
+		case containerStateTerminated:
 			terminated := change.newStatus.State.Terminated
 			slog.Info("Container is terminated", podAttr, containerAttr,
 				slog.Int("exitCode", int(terminated.ExitCode)),
@@ -150,17 +149,30 @@ func (h *eventHandler) notifyContainerStarted(namespace, podName string, oldStat
 		// - Waiting -> Running
 		// - Waiting -> Terminated
 		// - Terminated -> Running
-		if (oldState == "Waiting" && newState != "Waiting") || (oldState == "Terminated" && newState == "Running") {
-			h.containerStartedCh <- ContainerStartedEvent{Namespace: namespace, PodName: podName, ContainerName: change.newStatus.Name}
+		if (oldState == containerStateWaiting && newState != containerStateWaiting) ||
+			(oldState == containerStateTerminated && newState == containerStateRunning) {
+			h.containerStartedCh <- ContainerStartedEvent{
+				Namespace:     namespace,
+				PodName:       podName,
+				ContainerName: change.newStatus.Name,
+			}
 		}
 	}
 }
 
+type containerState int
+
+const (
+	containerStateWaiting containerState = iota
+	containerStateRunning
+	containerStateTerminated
+)
+
 type containerStateChange struct {
 	oldStatus corev1.ContainerStatus
 	newStatus corev1.ContainerStatus
-	oldState  string
-	newState  string
+	oldState  containerState
+	newState  containerState
 }
 
 func computeContainerStateChanges(oldStatuses, newStatuses []corev1.ContainerStatus) []containerStateChange {
@@ -190,19 +202,19 @@ func mapContainerStatusByName(containerStatuses []corev1.ContainerStatus) map[st
 	return containerStatusMap
 }
 
-func getContainerState(containerStatus corev1.ContainerStatus) string {
+func getContainerState(containerStatus corev1.ContainerStatus) containerState {
 	// According to corev1.ContainerState, either member is set.
 	// If none of them is specified, default to corev1.ContainerStateWaiting.
 	if containerStatus.State.Waiting != nil {
-		return "Waiting"
+		return containerStateWaiting
 	}
 	if containerStatus.State.Running != nil {
-		return "Running"
+		return containerStateRunning
 	}
 	if containerStatus.State.Terminated != nil {
-		return "Terminated"
+		return containerStateTerminated
 	}
-	return "Waiting"
+	return containerStateWaiting
 }
 
 func (h *eventHandler) OnDelete(obj interface{}) {
