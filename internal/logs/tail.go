@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -21,7 +21,15 @@ import (
 //   - The Pod is not found (already removed from Node)
 //   - The context is canceled
 func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) {
-	log.Printf("Tailing the container log of %s/%s/%s", namespace, podName, containerName)
+	logger := slog.With(
+		slog.Group("pod",
+			slog.String("namespace", namespace),
+			slog.String("name", podName),
+		),
+		slog.Group("container",
+			slog.String("name", containerName),
+		))
+	logger.Info("Tailing the container log")
 	var t tailer
 	for {
 		err := t.resume(ctx, clientset, namespace, podName, containerName)
@@ -29,14 +37,14 @@ func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podNam
 			return
 		}
 		if kerrors.IsNotFound(err) {
-			log.Printf("Pod %s/%s was deleted before reached to EOF of the container log: %s", namespace, podName, err)
+			logger.Warn("Pod was deleted before reached to EOF of the container log", "error", err)
 			return
 		}
 		if errors.Is(err, context.Canceled) {
-			log.Printf("Stopped tailing the container log of %s/%s/%s before reached to EOF: %s", namespace, podName, containerName, err)
+			logger.Warn("Stopped tailing the container log before reached to EOF", "error", err)
 			return
 		}
-		log.Printf("Retrying to tail the container log of %s/%s/%s: %s", namespace, podName, containerName, err)
+		logger.Warn("Retrying to tail the container log", "error", err)
 		time.Sleep(100 * time.Millisecond)
 	}
 }
@@ -63,7 +71,7 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 		line, err := reader.ReadString('\n')
 		if line != "" {
 			rawTimestamp, metaTime, message := parseTimestamp(line)
-			fmt.Printf("%s | %s/%s/%s | %s", rawTimestamp, namespace, podName, containerName, message)
+			fmt.Printf("|%s|%s|%s|%s| %s", rawTimestamp, namespace, podName, containerName, message)
 			t.lastLogTime = metaTime
 		}
 		if err == io.EOF {
@@ -85,7 +93,7 @@ func parseTimestamp(line string) (string, *metav1.Time, string) {
 	rawTimestamp, message := s[0], s[1]
 	t, err := time.Parse(time.RFC3339, rawTimestamp)
 	if err != nil {
-		log.Printf("Internal error: invalid log timestamp: %s", err)
+		slog.Debug("Internal error: invalid log timestamp", "error", err, "rawTimestamp", rawTimestamp)
 		return "", nil, line
 	}
 	metaTime := metav1.NewTime(t)
