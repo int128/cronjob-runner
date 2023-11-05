@@ -77,6 +77,8 @@ func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
 	oldPod := oldObj.(*corev1.Pod)
 	newPod := newObj.(*corev1.Pod)
 	h.notifyPodStatusChange(oldPod, newPod)
+	h.notifyPodConditionScheduled(oldPod, newPod)
+	h.notifyPodConditionDisruptionTarget(oldPod, newPod)
 	h.notifyContainerStatusChanges(newPod.Namespace, newPod.Name, oldPod.Status.InitContainerStatuses, newPod.Status.InitContainerStatuses)
 	h.notifyContainerStatusChanges(newPod.Namespace, newPod.Name, oldPod.Status.ContainerStatuses, newPod.Status.ContainerStatuses)
 	h.notifyContainerStarted(newPod.Namespace, newPod.Name, oldPod.Status.InitContainerStatuses, newPod.Status.InitContainerStatuses)
@@ -108,6 +110,54 @@ func (h *eventHandler) notifyPodStatusChange(oldPod, newPod *corev1.Pod) {
 			slog.String("message", newPod.Status.Message),
 		)
 	}
+}
+
+func (h *eventHandler) notifyPodConditionScheduled(oldPod, newPod *corev1.Pod) {
+	podAttr := slog.Group("pod",
+		slog.String("namespace", newPod.Namespace),
+		slog.String("name", newPod.Name),
+	)
+	condition := findChangedPodConditionByType(corev1.PodScheduled, oldPod.Status.Conditions, newPod.Status.Conditions)
+	if condition.Status == corev1.ConditionTrue {
+		slog.Info("Pod is scheduled", podAttr, slog.String("node", newPod.Spec.NodeName))
+	}
+	if condition.Status == corev1.ConditionFalse {
+		slog.Info("Pod is not scheduled", podAttr,
+			slog.String("reason", condition.Reason),
+			slog.String("message", condition.Message))
+	}
+}
+
+func (h *eventHandler) notifyPodConditionDisruptionTarget(oldPod, newPod *corev1.Pod) {
+	podAttr := slog.Group("pod",
+		slog.String("namespace", newPod.Namespace),
+		slog.String("name", newPod.Name),
+		slog.String("node", newPod.Spec.NodeName),
+	)
+	condition := findChangedPodConditionByType(corev1.DisruptionTarget, oldPod.Status.Conditions, newPod.Status.Conditions)
+	if condition.Status == corev1.ConditionTrue {
+		slog.Info("Pod will be terminated due to a disruption", podAttr,
+			slog.String("reason", condition.Reason),
+			slog.String("message", condition.Message))
+	}
+}
+
+func findChangedPodConditionByType(conditionType corev1.PodConditionType, oldConditions, newConditions []corev1.PodCondition) corev1.PodCondition {
+	oldCondition := findPodConditionByType(conditionType, oldConditions)
+	newCondition := findPodConditionByType(conditionType, newConditions)
+	if oldCondition.Status != newCondition.Status && newCondition.Type != "" {
+		return newCondition
+	}
+	return corev1.PodCondition{}
+}
+
+func findPodConditionByType(conditionType corev1.PodConditionType, conditions []corev1.PodCondition) corev1.PodCondition {
+	for _, condition := range conditions {
+		if condition.Type == conditionType {
+			return condition
+		}
+	}
+	return corev1.PodCondition{}
 }
 
 func (h *eventHandler) notifyContainerStatusChanges(namespace, podName string, oldStatuses, newStatuses []corev1.ContainerStatus) {
