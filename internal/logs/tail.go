@@ -51,7 +51,6 @@ func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podNam
 
 type tailer struct {
 	lastLogTime *metav1.Time
-	logger      *slog.Logger
 }
 
 func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) error {
@@ -72,7 +71,7 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 		line, err := reader.ReadString('\n')
 		if line != "" {
 			rawTimestamp, metaTime, message := parseTimestamp(line)
-			fmt.Printf("| %s | %s/%s/%s | %s", rawTimestamp, namespace, podName, containerName, message)
+			fmt.Printf("|%s|%s|%s|%s| %s", rawTimestamp, namespace, podName, containerName, message)
 			t.lastLogTime = metaTime
 		}
 		if err == io.EOF {
