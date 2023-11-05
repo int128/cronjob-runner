@@ -70,12 +70,12 @@ func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
 }
 
 func notifyConditionChange(oldJob, newJob *batchv1.Job) {
-	changedMap := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
+	changedConditions := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
 	jobAttr := slog.Group("job",
 		slog.String("namespace", newJob.Namespace),
 		slog.String("name", newJob.Name),
 	)
-	for conditionType, condition := range changedMap {
+	for conditionType, condition := range changedConditions {
 		switch conditionType {
 		case batchv1.JobComplete:
 			slog.Info("Job is completed", jobAttr)
@@ -93,8 +93,8 @@ func notifyConditionChange(oldJob, newJob *batchv1.Job) {
 }
 
 func notifyFinished(oldJob, newJob *batchv1.Job, finishedCh chan<- batchv1.JobConditionType) {
-	changedMap := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
-	for conditionType := range changedMap {
+	changedConditions := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
+	for conditionType := range changedConditions {
 		if conditionType == batchv1.JobComplete || conditionType == batchv1.JobFailed {
 			finishedCh <- conditionType
 			return
@@ -103,17 +103,17 @@ func notifyFinished(oldJob, newJob *batchv1.Job, finishedCh chan<- batchv1.JobCo
 }
 
 func findChangedConditionsToTrue(oldConditions, newConditions []batchv1.JobCondition) map[batchv1.JobConditionType]batchv1.JobCondition {
-	changedMap := make(map[batchv1.JobConditionType]batchv1.JobCondition)
+	changed := make(map[batchv1.JobConditionType]batchv1.JobCondition)
 	oldMap := mapConditionByType(oldConditions)
 	newMap := mapConditionByType(newConditions)
 	for conditionType := range newMap {
 		oldCondition := oldMap[conditionType]
 		newCondition := newMap[conditionType]
 		if oldCondition.Status != newCondition.Status && newCondition.Status == corev1.ConditionTrue {
-			changedMap[conditionType] = newCondition
+			changed[conditionType] = newCondition
 		}
 	}
-	return changedMap
+	return changed
 }
 
 func mapConditionByType(conditions []batchv1.JobCondition) map[batchv1.JobConditionType]batchv1.JobCondition {
