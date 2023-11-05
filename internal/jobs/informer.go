@@ -65,54 +65,63 @@ func (h *eventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
 	oldJob := oldObj.(*batchv1.Job)
 	newJob := newObj.(*batchv1.Job)
-	notifyConditionChange(oldJob, newJob, h.finishedCh)
+	notifyConditionChange(oldJob, newJob)
+	notifyFinished(oldJob, newJob, h.finishedCh)
 }
 
-func notifyConditionChange(oldJob, newJob *batchv1.Job, finishedCh chan<- batchv1.JobConditionType) {
-	condition := findChangedCondition(oldJob.Status.Conditions, newJob.Status.Conditions)
-	if condition == nil {
-		return
-	}
+func notifyConditionChange(oldJob, newJob *batchv1.Job) {
+	changedMap := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
 	jobAttr := slog.Group("job",
 		slog.String("namespace", newJob.Namespace),
 		slog.String("name", newJob.Name),
 	)
-	switch condition.Type {
-	case batchv1.JobComplete:
-		slog.Info("Job is completed", jobAttr)
-		finishedCh <- condition.Type
-	case batchv1.JobFailed:
-		slog.Info("Job is failed", jobAttr,
-			slog.String("reason", condition.Reason),
-			slog.String("message", condition.Message))
-		finishedCh <- condition.Type
-	default:
-		slog.Info("Job condition is changed", jobAttr,
-			slog.Any("conditionType", condition.Type),
-			slog.String("reason", condition.Reason),
-			slog.String("message", condition.Message))
-	}
-}
-
-func findChangedCondition(oldConditions, newConditions []batchv1.JobCondition) *batchv1.JobCondition {
-	oldCondition := findTrueCondition(oldConditions)
-	newCondition := findTrueCondition(newConditions)
-	if newCondition == nil {
-		return nil // no condition is available
-	}
-	if oldCondition != nil && oldCondition.Type == newCondition.Type {
-		return nil // condition is not changed
-	}
-	return newCondition
-}
-
-func findTrueCondition(conditions []batchv1.JobCondition) *batchv1.JobCondition {
-	for _, condition := range conditions {
-		if condition.Status == corev1.ConditionTrue {
-			return &condition
+	for conditionType, condition := range changedMap {
+		switch conditionType {
+		case batchv1.JobComplete:
+			slog.Info("Job is completed", jobAttr)
+		case batchv1.JobFailed:
+			slog.Info("Job is failed", jobAttr,
+				slog.String("reason", condition.Reason),
+				slog.String("message", condition.Message))
+		default:
+			slog.Info("Job condition is changed", jobAttr,
+				slog.Any("conditionType", condition.Type),
+				slog.String("reason", condition.Reason),
+				slog.String("message", condition.Message))
 		}
 	}
-	return nil
+}
+
+func notifyFinished(oldJob, newJob *batchv1.Job, finishedCh chan<- batchv1.JobConditionType) {
+	changedMap := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
+	for conditionType := range changedMap {
+		if conditionType == batchv1.JobComplete || conditionType == batchv1.JobFailed {
+			finishedCh <- conditionType
+			return
+		}
+	}
+}
+
+func findChangedConditionsToTrue(oldConditions, newConditions []batchv1.JobCondition) map[batchv1.JobConditionType]batchv1.JobCondition {
+	changedMap := make(map[batchv1.JobConditionType]batchv1.JobCondition)
+	oldMap := mapConditionByType(oldConditions)
+	newMap := mapConditionByType(newConditions)
+	for conditionType := range newMap {
+		oldCondition := oldMap[conditionType]
+		newCondition := newMap[conditionType]
+		if oldCondition.Status != corev1.ConditionTrue && newCondition.Status == corev1.ConditionTrue {
+			changedMap[conditionType] = newCondition
+		}
+	}
+	return changedMap
+}
+
+func mapConditionByType(conditions []batchv1.JobCondition) map[batchv1.JobConditionType]batchv1.JobCondition {
+	m := make(map[batchv1.JobConditionType]batchv1.JobCondition)
+	for _, condition := range conditions {
+		m[condition.Type] = condition
+	}
+	return m
 }
 
 func (h *eventHandler) OnDelete(obj interface{}) {
