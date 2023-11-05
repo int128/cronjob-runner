@@ -62,37 +62,52 @@ func (h *eventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 			slog.String("name", job.Name)))
 }
 
-func (h *eventHandler) OnUpdate(_, newObj interface{}) {
-	job := newObj.(*batchv1.Job)
-	condition := findCondition(job)
+func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
+	oldJob := oldObj.(*batchv1.Job)
+	newJob := newObj.(*batchv1.Job)
+	notifyConditionChange(oldJob, newJob, h.finishedCh)
+}
+
+func notifyConditionChange(oldJob, newJob *batchv1.Job, finishedCh chan<- batchv1.JobConditionType) {
+	condition := findChangedCondition(oldJob.Status.Conditions, newJob.Status.Conditions)
 	if condition == nil {
 		return
 	}
 	jobAttr := slog.Group("job",
-		slog.String("namespace", job.Namespace),
-		slog.String("name", job.Name),
+		slog.String("namespace", newJob.Namespace),
+		slog.String("name", newJob.Name),
 	)
 	switch condition.Type {
 	case batchv1.JobComplete:
 		slog.Info("Job is completed", jobAttr)
-		h.finishedCh <- condition.Type
+		finishedCh <- condition.Type
 	case batchv1.JobFailed:
 		slog.Info("Job is failed", jobAttr,
 			slog.String("reason", condition.Reason),
-			slog.String("message", condition.Message),
-		)
-		h.finishedCh <- condition.Type
+			slog.String("message", condition.Message))
+		finishedCh <- condition.Type
 	default:
 		slog.Info("Job condition is changed", jobAttr,
 			slog.Any("conditionType", condition.Type),
 			slog.String("reason", condition.Reason),
-			slog.String("message", condition.Message),
-		)
+			slog.String("message", condition.Message))
 	}
 }
 
-func findCondition(job *batchv1.Job) *batchv1.JobCondition {
-	for _, condition := range job.Status.Conditions {
+func findChangedCondition(oldConditions, newConditions []batchv1.JobCondition) *batchv1.JobCondition {
+	oldCondition := findTrueCondition(oldConditions)
+	newCondition := findTrueCondition(newConditions)
+	if newCondition == nil {
+		return nil // no condition is available
+	}
+	if oldCondition != nil || oldCondition.Type == newCondition.Type {
+		return nil // condition is not changed
+	}
+	return newCondition
+}
+
+func findTrueCondition(conditions []batchv1.JobCondition) *batchv1.JobCondition {
+	for _, condition := range conditions {
 		if condition.Status == corev1.ConditionTrue {
 			return &condition
 		}
