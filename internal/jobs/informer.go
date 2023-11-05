@@ -100,7 +100,7 @@ func findChangedCondition(oldConditions, newConditions []batchv1.JobCondition) *
 	if newCondition == nil {
 		return nil // no condition is available
 	}
-	if oldCondition != nil || oldCondition.Type == newCondition.Type {
+	if oldCondition != nil && oldCondition.Type == newCondition.Type {
 		return nil // condition is not changed
 	}
 	return newCondition
