@@ -87,57 +87,55 @@ func (h *eventHandler) notifyPodStatusChange(oldPod, newPod *corev1.Pod) {
 	if oldPod.Status.Phase == newPod.Status.Phase {
 		return
 	}
-	slog.Info("Pod phase is changed",
-		slog.Group("pod",
-			slog.String("namespace", newPod.Namespace),
-			slog.String("name", newPod.Name),
-			slog.Any("phase", newPod.Status.Phase),
-		))
+	podAttr := slog.Group("pod",
+		slog.String("namespace", newPod.Namespace),
+		slog.String("name", newPod.Name),
+		slog.Any("phase", newPod.Status.Phase),
+	)
+	switch newPod.Status.Phase {
+	case corev1.PodRunning:
+		slog.Info("Pod is running", podAttr)
+	case corev1.PodSucceeded:
+		slog.Info("Pod is succeeded", podAttr)
+	case corev1.PodFailed:
+		slog.Info("Pod is failed", podAttr,
+			slog.String("reason", newPod.Status.Reason),
+			slog.String("message", newPod.Status.Message),
+		)
+	default:
+		slog.Info("Pod phase is changed", podAttr,
+			slog.String("reason", newPod.Status.Reason),
+			slog.String("message", newPod.Status.Message),
+		)
+	}
 }
 
 func (h *eventHandler) notifyContainerStatusChanges(namespace, podName string, oldStatuses, newStatuses []corev1.ContainerStatus) {
 	containerStateChanges := computeContainerStateChanges(oldStatuses, newStatuses)
 	for _, change := range containerStateChanges {
+		podAttr := slog.Group("pod",
+			slog.String("namespace", namespace),
+			slog.String("name", podName),
+		)
+		containerAttr := slog.Group("container",
+			slog.String("name", change.newStatus.Name),
+			slog.String("state", change.newState),
+		)
 		switch change.newState {
 		case "Waiting":
 			waiting := change.newStatus.State.Waiting
-			slog.Info("Container is waiting",
-				slog.Group("pod",
-					slog.String("namespace", namespace),
-					slog.String("name", podName),
-				),
-				slog.Group("container",
-					slog.String("name", change.newStatus.Name),
-					slog.String("state", change.newState),
-					slog.String("reason", waiting.Reason),
-					slog.String("message", waiting.Message),
-				),
+			slog.Info("Container is waiting", podAttr, containerAttr,
+				slog.String("reason", waiting.Reason),
+				slog.String("message", waiting.Message),
 			)
 		case "Running":
-			slog.Info("Container is running",
-				slog.Group("pod",
-					slog.String("namespace", namespace),
-					slog.String("name", podName),
-				),
-				slog.Group("container",
-					slog.String("name", change.newStatus.Name),
-					slog.String("state", change.newState),
-				),
-			)
+			slog.Info("Container is running", podAttr, containerAttr)
 		case "Terminated":
 			terminated := change.newStatus.State.Terminated
-			slog.Info("Container is terminated",
-				slog.Group("pod",
-					slog.String("namespace", namespace),
-					slog.String("name", podName),
-				),
-				slog.Group("container",
-					slog.String("name", change.newStatus.Name),
-					slog.String("state", change.newState),
-					slog.Int("exitCode", int(terminated.ExitCode)),
-					slog.String("reason", terminated.Reason),
-					slog.String("message", terminated.Message),
-				),
+			slog.Info("Container is terminated", podAttr, containerAttr,
+				slog.Int("exitCode", int(terminated.ExitCode)),
+				slog.String("reason", terminated.Reason),
+				slog.String("message", terminated.Message),
 			)
 		}
 	}

@@ -68,43 +68,26 @@ func (h *eventHandler) OnUpdate(_, newObj interface{}) {
 	if condition == nil {
 		return
 	}
+	jobAttr := slog.Group("job",
+		slog.String("namespace", job.Namespace),
+		slog.String("name", job.Name),
+	)
 	switch condition.Type {
 	case batchv1.JobComplete:
-		slog.Info("Job is completed",
-			slog.Group("job",
-				slog.String("namespace", job.Namespace),
-				slog.String("name", job.Name),
-			),
-			slog.Group("condition",
-				slog.Any("type", condition.Type),
-				slog.String("reason", condition.Reason),
-				slog.String("message", condition.Message),
-			))
+		slog.Info("Job is completed", jobAttr)
 		h.finishedCh <- condition.Type
-
 	case batchv1.JobFailed:
-		slog.Info("Job is failed",
-			slog.Group("job",
-				slog.String("namespace", job.Namespace),
-				slog.String("name", job.Name),
-			),
-			slog.Group("condition",
-				slog.String("reason", condition.Reason),
-				slog.String("message", condition.Message),
-			))
+		slog.Info("Job is failed", jobAttr,
+			slog.String("reason", condition.Reason),
+			slog.String("message", condition.Message),
+		)
 		h.finishedCh <- condition.Type
-
 	default:
-		slog.Info("Job condition is changed",
-			slog.Group("job",
-				slog.String("namespace", job.Namespace),
-				slog.String("name", job.Name),
-			),
-			slog.Group("condition",
-				slog.Any("type", condition.Type),
-				slog.String("reason", condition.Reason),
-				slog.String("message", condition.Message),
-			))
+		slog.Info("Job condition is changed", jobAttr,
+			slog.Any("conditionType", condition.Type),
+			slog.String("reason", condition.Reason),
+			slog.String("message", condition.Message),
+		)
 	}
 }
 
