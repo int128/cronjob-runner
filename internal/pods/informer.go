@@ -119,9 +119,7 @@ func (h *eventHandler) notifyPodConditionScheduled(oldPod, newPod *corev1.Pod) {
 	)
 	condition := findChangedPodConditionByType(corev1.PodScheduled, oldPod.Status.Conditions, newPod.Status.Conditions)
 	if condition.Status == corev1.ConditionTrue {
-		slog.Info("Pod is scheduled", podAttr,
-			slog.String("hostIP", newPod.Status.HostIP),
-			slog.String("node", newPod.Spec.NodeName))
+		slog.Info("Pod is scheduled", podAttr, slog.String("node", newPod.Spec.NodeName))
 	}
 	if condition.Status == corev1.ConditionFalse {
 		slog.Info("Pod is not scheduled", podAttr,
