@@ -11,8 +11,10 @@ import (
 	"github.com/int128/cronjob-runner/internal/jobs"
 	"github.com/int128/cronjob-runner/internal/logs"
 	"github.com/int128/cronjob-runner/internal/pods"
+	"github.com/int128/cronjob-runner/internal/secrets"
 	"github.com/spf13/pflag"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
@@ -22,6 +24,15 @@ type options struct {
 	namespace   string
 	cronJobName string
 	env         map[string]string
+	secretEnv   []string
+}
+
+func (o options) secretEnvMap() map[string]string {
+	secretEnvMap := make(map[string]string)
+	for _, env := range o.secretEnv {
+		secretEnvMap[env] = os.Getenv(env)
+	}
+	return secretEnvMap
 }
 
 func run(clientset kubernetes.Interface, o options) error {
@@ -29,11 +40,30 @@ func run(clientset kubernetes.Interface, o options) error {
 	ctx, stopNotifyCtx := signal.NotifyContext(ctx, os.Interrupt)
 	defer stopNotifyCtx()
 
-	job, err := jobs.CreateFromCronJob(ctx, clientset, o.namespace, o.cronJobName, o.env)
+	secret, err := secrets.Create(ctx, clientset, o.namespace, o.cronJobName, o.secretEnvMap())
+	if err != nil {
+		return fmt.Errorf("could not create a Secret for Job: %w", err)
+	}
+	defer func(secretName string) {
+		// root ctx may be canceled at this time
+		if err := secrets.Delete(context.Background(), clientset, o.namespace, secretName); err != nil {
+			log.Printf("Could not delete the Secret: %s", err)
+		}
+	}(secret.Name)
+
+	job, err := jobs.CreateFromCronJob(ctx, clientset, o.namespace, o.cronJobName, jobs.CreateOptions{
+		Env:       o.env,
+		SecretEnv: o.secretEnv,
+		Secret:    corev1.LocalObjectReference{Name: secret.Name},
+	})
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
 	jobs.PrintYAML(*job, os.Stderr)
+
+	if _, err := secrets.ApplyOwnerReference(ctx, clientset, o.namespace, secret.Name, job); err != nil {
+		return fmt.Errorf("could not apply the owner reference to the Secret: %w", err)
+	}
 
 	var backgroundWaiter wait.Group
 	defer func() {
@@ -85,7 +115,10 @@ func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
 	var o options
 	pflag.StringVar(&o.cronJobName, "cronjob-name", "", "Name of CronJob")
-	pflag.StringToStringVar(&o.env, "env", nil, "Environment variables to set into the all containers")
+	pflag.StringToStringVar(&o.env, "env", nil,
+		"Environment variables to set into the all containers, in the form of KEY=VALUE")
+	pflag.StringArrayVar(&o.secretEnv, "secret-env", nil,
+		"Environment variables of secrets to set into the all containers, in the form of KEY")
 	kubernetesFlags := genericclioptions.NewConfigFlags(false)
 	kubernetesFlags.AddFlags(pflag.CommandLine)
 	pflag.Parse()
