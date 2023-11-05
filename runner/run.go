@@ -4,10 +4,9 @@
 // - Create a Job from the job template of CronJob.
 // - Show the statuses of Job, Pod(s) and container(s) when changed.
 // - Tail the log streams of all containers.
-// - If the job is succeeded, exit with code 0. Otherwise, exit with code 1.
+// - Wait for the Job to be completed or failed.
 //
-// CAVEAT: This package is very experimental.
-// It is designed for the internal use of cronjob-runner command.
+// CAVEAT: This package is designed for the internal use of cronjob-runner command.
 // The specification may be changed in the future.
 package runner
 
