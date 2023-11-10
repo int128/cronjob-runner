@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/int128/cronjob-runner/runner"
 	"github.com/spf13/pflag"
@@ -14,7 +15,7 @@ import (
 
 func run(clientset kubernetes.Interface, opts runner.Options) error {
 	ctx := context.Background()
-	ctx, stopNotifyCtx := signal.NotifyContext(ctx, os.Interrupt)
+	ctx, stopNotifyCtx := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stopNotifyCtx()
 
 	return runner.Run(ctx, clientset, opts)
