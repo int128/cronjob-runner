@@ -73,7 +73,7 @@ func Run(ctx context.Context, clientset kubernetes.Interface, opts Options) erro
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
-	jobs.PrintYAML(*job, os.Stderr)
+	printJobYAML(*job)
 
 	var backgroundWaiter wait.Group
 	defer func() {
@@ -119,4 +119,12 @@ func Run(ctx context.Context, clientset kubernetes.Interface, opts Options) erro
 		slog.Info("Shutting down")
 		return ctx.Err()
 	}
+}
+
+func printJobYAML(job batchv1.Job) {
+	// Group for GitHub Actions
+	// https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
+	_, _ = fmt.Fprintln(os.Stderr, "::group::Job YAML")
+	jobs.PrintYAML(job, os.Stderr)
+	_, _ = fmt.Fprintln(os.Stderr, "::endgroup::")
 }
