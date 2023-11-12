@@ -3,6 +3,23 @@
 This is a command to run a `Job` from `CronJob` in Kubernetes.
 It is designed for running a one-shot job by yet another job infrastructure such as GitHub Actions or Jenkins.
 
+When this command is run in GitHub Actions, it gets a CronJob and creates a Job in Kubernetes clusters.
+
+```mermaid
+graph LR
+  subgraph GitHub Actions Job
+    runner[cronjob-runner]
+  end
+  subgraph Kubernetes cluster
+    CronJob
+    Job -.create.-> Pod
+  end
+  runner -.get.-> CronJob
+  runner -.create.-> Job
+  runner -.watch.-> Job
+  runner -.watch.-> Pod
+```
+
 ## Getting Started
 
 You can download the latest release from [GitHub Releases](https://github.com/int128/cronjob-runner/releases).
@@ -14,7 +31,7 @@ To run a Job from the CronJob,
 cronjob-runner [--namespace your-namespace] --cronjob-name your-cronjob-name
 ```
 
-Create a CronJob before running a Job.
+You need to create a CronJob before running a Job.
 You can set `suspend` field to prevent CronJob controller from scheduling.
 Here is an example for a one-shot job.
 
@@ -30,7 +47,8 @@ spec:
     spec: # ...snip...
 ```
 
-Here is an example of a [simple CronJob](e2e_test/simple.yaml).
+Here is an example output of a [simple CronJob](e2e_test/simple.yaml).
+You can see the actual examples from [e2e-test workflow](https://github.com/int128/cronjob-runner/actions/workflows/e2e-test.yaml?query=branch%3Amain).
 
 ```console
 $ cronjob-runner --cronjob-name simple
@@ -57,14 +75,30 @@ kind: Job
 05:00:16.643584 main.go:42: INFO Stopped background workers
 ```
 
-You can see the actual examples from [e2e-test workflow](https://github.com/int128/cronjob-runner/actions/workflows/e2e-test.yaml?query=branch%3Amain).
+This command runs a Job as follows:
 
-This command runs a job as follows:
+1. Get the CronJob resource.
+2. Create a Job resource from the job template.
+3. When the status of Job, Pod or container is changed, show it.
+4. When a container is started, tail the log stream.
+5. When the Job status is succeeded, exit with code 0. Otherwise, exit with code 1.
 
-- Create a Job from the job template of CronJob.
-- Show the statuses of Job, Pod(s) and container(s) when changed.
-- Tail the log streams of all containers.
-- If the job is succeeded, exit with code 0. Otherwise, exit with code 1.
+Here is the relationship of Kubernetes resources.
+
+```mermaid
+graph LR
+  subgraph CronJob
+    JobTemplate
+  end
+  JobTemplate --> Job
+  subgraph Job
+    PodTemplate
+  end
+  PodTemplate --> Pod
+  subgraph Pod
+    Container
+  end
+```
 
 ### Inject environment variables
 
@@ -86,12 +120,16 @@ Do not inject any secret, because anyone can see it by the log or kubectl comman
 
 ### Owner references
 
-This command sets the owner reference of a Job to the parent CronJob.
-Here is the relationship of ownership.
+This command sets an owner reference from a Job to the parent CronJob.
+For example,
 
-```mermaid
-graph LR
-  CronJob --> Job --> Pod
+```yaml
+    ownerReferences:
+    - apiVersion: batch/v1
+      controller: true
+      kind: CronJob
+      name: simple
+      uid: 948027a3-60af-41d2-8752-6a3be860a200
 ```
 
 When a Job is completed or failed, CronJob controller will clean up the outdated Jobs
