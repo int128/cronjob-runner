@@ -2,10 +2,11 @@ package jobs
 
 import (
 	"context"
+	"testing"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/utils/pointer"
-	"testing"
+	"k8s.io/utils/ptr"
 
 	"github.com/google/go-cmp/cmp"
 	batchv1 "k8s.io/api/batch/v1"
@@ -21,7 +22,7 @@ func TestCreateFromCronJob(t *testing.T) {
 					Name:      "example-cronjob",
 				},
 				Spec: batchv1.CronJobSpec{
-					Suspend:  pointer.Bool(true),
+					Suspend:  ptr.To(true),
 					Schedule: "@annual",
 					JobTemplate: batchv1.JobTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
@@ -29,7 +30,7 @@ func TestCreateFromCronJob(t *testing.T) {
 							Annotations: map[string]string{"my/annotation": "bar"},
 						},
 						Spec: batchv1.JobSpec{
-							BackoffLimit: pointer.Int32(1),
+							BackoffLimit: ptr.To[int32](1),
 							Template: corev1.PodTemplateSpec{
 								Spec: corev1.PodSpec{
 									Containers: []corev1.Container{{
@@ -54,13 +55,13 @@ func TestCreateFromCronJob(t *testing.T) {
 					APIVersion: "batch/v1",
 					Kind:       "CronJob",
 					Name:       "example-cronjob",
-					Controller: pointer.Bool(true),
+					Controller: ptr.To(true),
 				}},
 				Labels:      map[string]string{"my/label": "foo"},
 				Annotations: map[string]string{"my/annotation": "bar"},
 			},
 			Spec: batchv1.JobSpec{
-				BackoffLimit: pointer.Int32(1),
+				BackoffLimit: ptr.To[int32](1),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
@@ -83,11 +84,11 @@ func TestCreateFromCronJob(t *testing.T) {
 					Name:      "example-cronjob",
 				},
 				Spec: batchv1.CronJobSpec{
-					Suspend:  pointer.Bool(true),
+					Suspend:  ptr.To(true),
 					Schedule: "@annual",
 					JobTemplate: batchv1.JobTemplateSpec{
 						Spec: batchv1.JobSpec{
-							BackoffLimit: pointer.Int32(1),
+							BackoffLimit: ptr.To[int32](1),
 							Template: corev1.PodTemplateSpec{
 								Spec: corev1.PodSpec{
 									Containers: []corev1.Container{{
@@ -113,11 +114,11 @@ func TestCreateFromCronJob(t *testing.T) {
 					APIVersion: "batch/v1",
 					Kind:       "CronJob",
 					Name:       "example-cronjob",
-					Controller: pointer.Bool(true),
+					Controller: ptr.To(true),
 				}},
 			},
 			Spec: batchv1.JobSpec{
-				BackoffLimit: pointer.Int32(1),
+				BackoffLimit: ptr.To[int32](1),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
