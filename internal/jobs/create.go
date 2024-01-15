@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 // CreateFromCronJob creates a job from the CronJob template.
@@ -41,7 +41,7 @@ func CreateFromCronJob(
 				Kind:       "CronJob",
 				Name:       cronJob.GetName(),
 				UID:        cronJob.GetUID(),
-				Controller: pointer.Bool(true),
+				Controller: ptr.To(true),
 			}},
 			Labels:      cronJob.Spec.JobTemplate.Labels,
 			Annotations: cronJob.Spec.JobTemplate.Annotations,
