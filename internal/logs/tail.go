@@ -16,11 +16,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+type tailLogger interface {
+	PrintContainerLog(rawTimestamp, namespace, podName, containerName, message string)
+}
+
 // Tail tails the container log until the following cases:
 //   - Reached to EOF
 //   - The Pod is not found (already removed from Node)
 //   - The context is canceled
-func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) {
+func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string, tlog tailLogger) {
 	logger := slog.With(
 		slog.Group("pod",
 			slog.String("namespace", namespace),
@@ -32,7 +36,7 @@ func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podNam
 	logger.Info("Tailing the container log")
 	var t tailer
 	for {
-		err := t.resume(ctx, clientset, namespace, podName, containerName)
+		err := t.resume(ctx, clientset, namespace, podName, containerName, tlog)
 		if err == nil {
 			return
 		}
@@ -53,7 +57,7 @@ type tailer struct {
 	lastLogTime *metav1.Time
 }
 
-func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) error {
+func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string, tlog tailLogger) error {
 	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: containerName,
 		Follow:    true,
@@ -71,7 +75,7 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 		line, err := reader.ReadString('\n')
 		if line != "" {
 			rawTimestamp, metaTime, message := parseTimestamp(line)
-			fmt.Printf("|%s|%s|%s|%s| %s", rawTimestamp, namespace, podName, containerName, message)
+			tlog.PrintContainerLog(rawTimestamp, namespace, podName, containerName, message)
 			t.lastLogTime = metaTime
 		}
 		if err == io.EOF {

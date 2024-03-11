@@ -37,6 +37,10 @@ type Options struct {
 	// Env is a map of environment variables injected to all containers of a Pod.
 	// Optional.
 	Env map[string]string
+
+	// Logger is an implementation of Logger interface.
+	// Default to the defaultLogger.
+	Logger Logger
 }
 
 func (opts Options) validate() error {
@@ -68,6 +72,9 @@ func Run(ctx context.Context, clientset kubernetes.Interface, opts Options) erro
 	if err := opts.validate(); err != nil {
 		return fmt.Errorf("invalid options: %w", err)
 	}
+	if opts.Logger == nil {
+		opts.Logger = defaultLogger{}
+	}
 
 	job, err := jobs.CreateFromCronJob(ctx, clientset, opts.Namespace, opts.CronJobName, opts.Env)
 	if err != nil {
@@ -94,7 +101,7 @@ func Run(ctx context.Context, clientset kubernetes.Interface, opts Options) erro
 		for event := range containerStartedCh {
 			event := event
 			backgroundWaiter.Start(func() {
-				logs.Tail(ctx, clientset, event.Namespace, event.PodName, event.ContainerName)
+				logs.Tail(ctx, clientset, event.Namespace, event.PodName, event.ContainerName, opts.Logger)
 			})
 		}
 	})
