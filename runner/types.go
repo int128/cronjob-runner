@@ -28,11 +28,5 @@ type ContainerLogger interface {
 type defaultContainerLogger struct{}
 
 func (defaultContainerLogger) Handle(record ContainerLogRecord) {
-	fmt.Printf("|%s|%s|%s|%s| %s",
-		record.RawTimestamp,
-		record.Namespace,
-		record.PodName,
-		record.ContainerName,
-		record.Message,
-	)
+	fmt.Println(record.Message)
 }
