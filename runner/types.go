@@ -17,7 +17,7 @@ func (err JobFailedError) Error() string {
 }
 
 // ContainerLogRecord represents a record of container logs.
-type ContainerLogRecord = logs.LogRecord
+type ContainerLogRecord = logs.Record
 
 // ContainerLogger is an interface to handle the container logs.
 type ContainerLogger interface {

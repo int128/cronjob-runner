@@ -16,8 +16,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// LogRecord represents a record of container logs.
-type LogRecord struct {
+// Record represents a record of container logs.
+type Record struct {
 	RawTimestamp  string
 	Namespace     string
 	PodName       string
@@ -26,7 +26,7 @@ type LogRecord struct {
 }
 
 type tailLogger interface {
-	Handle(record LogRecord)
+	Handle(record Record)
 }
 
 // Tail tails the container log until the following cases:
@@ -84,7 +84,7 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 		line, err := reader.ReadString('\n')
 		if line != "" {
 			rawTimestamp, metaTime, message := parseTimestamp(line)
-			tlog.Handle(LogRecord{
+			tlog.Handle(Record{
 				RawTimestamp:  rawTimestamp,
 				Namespace:     namespace,
 				PodName:       podName,
