@@ -2,28 +2,46 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/int128/cronjob-runner/runner"
 	"github.com/spf13/pflag"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 )
 
-func run(clientset kubernetes.Interface, opts runner.Options) error {
+type options struct {
+	runner.RunCronJobOptions
+	Namespace   string
+	CronJobName string
+}
+
+func run(clientset kubernetes.Interface, opts options) error {
 	ctx := context.Background()
 	ctx, stopNotifyCtx := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stopNotifyCtx()
 
-	return runner.Run(ctx, clientset, opts)
+	cronJob, err := clientset.BatchV1().CronJobs(opts.Namespace).Get(ctx, opts.CronJobName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("could not get the CronJob: %w", err)
+	}
+	slog.Info("Found the CronJob",
+		slog.Group("cronJob",
+			slog.String("namespace", cronJob.Namespace),
+			slog.String("name", cronJob.Name)))
+
+	return runner.RunCronJob(ctx, clientset, cronJob, opts.RunCronJobOptions)
 }
 
 func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
-	var opts runner.Options
+	var opts options
 	pflag.StringVar(&opts.CronJobName, "cronjob-name", "", "Name of CronJob")
 	pflag.StringToStringVar(&opts.Env, "env", nil, "Environment variables to set into the all containers")
 	kubernetesFlags := genericclioptions.NewConfigFlags(false)

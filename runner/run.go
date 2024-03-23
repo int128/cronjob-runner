@@ -24,16 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Options represents a set of options for Run.
-type Options struct {
-	// Namespace is the namespace of the CronJob.
-	// Required.
-	Namespace string
-
-	// CronJobName is the name of the CronJob.
-	// Required.
-	CronJobName string
-
+// RunCronJobOptions represents a set of options for RunCronJob.
+type RunCronJobOptions struct {
 	// Env is a map of environment variables injected to all containers of a Pod.
 	// Optional.
 	Env map[string]string
@@ -43,44 +35,48 @@ type Options struct {
 	Logger Logger
 }
 
-func (opts Options) validate() error {
-	if opts.Namespace == "" {
-		return fmt.Errorf("namespace must be set")
-	}
-	if opts.CronJobName == "" {
-		return fmt.Errorf("cronJobName must be set")
-	}
-	return nil
-}
-
-// JobFailedError represents an error that the Job has failed.
-type JobFailedError struct {
-	JobNamespace string
-	JobName      string
-}
-
-func (err JobFailedError) Error() string {
-	return fmt.Sprintf("job %s/%s failed", err.JobNamespace, err.JobName)
-}
-
-// Run runs a new Job from the CronJob template.
+// RunCronJob runs a new Job from the CronJob template.
 // If the job is succeeded, it returns nil.
 // If the job is failed, it returns JobFailedError.
 // Otherwise, it returns an error.
 // If the context is canceled, it stops gracefully.
-func Run(ctx context.Context, clientset kubernetes.Interface, opts Options) error {
-	if err := opts.validate(); err != nil {
-		return fmt.Errorf("invalid options: %w", err)
-	}
-	if opts.Logger == nil {
-		opts.Logger = defaultLogger{}
-	}
-
-	job, err := jobs.CreateFromCronJob(ctx, clientset, opts.Namespace, opts.CronJobName, opts.Env)
+func RunCronJob(ctx context.Context, clientset kubernetes.Interface, cronJob *batchv1.CronJob, opts RunCronJobOptions) error {
+	job, err := jobs.CreateFromCronJob(ctx, clientset, cronJob, opts.Env)
 	if err != nil {
 		return fmt.Errorf("could not create a Job from CronJob: %w", err)
 	}
 	printJobYAML(*job)
+
+	if err := RunJob(ctx, clientset, job, RunJobOptions{Logger: opts.Logger}); err != nil {
+		return fmt.Errorf("could not run the Job: %w", err)
+	}
+	return nil
+}
+
+func printJobYAML(job batchv1.Job) {
+	// Group for GitHub Actions
+	// https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
+	_, _ = fmt.Fprintln(os.Stderr, "::group::Job YAML")
+	jobs.PrintYAML(job, os.Stderr)
+	_, _ = fmt.Fprintln(os.Stderr, "::endgroup::")
+}
+
+// RunJobOptions represents a set of options for RunJob.
+type RunJobOptions struct {
+	// Logger is an implementation of Logger interface.
+	// Default to the defaultLogger.
+	Logger Logger
+}
+
+// RunJob runs the given Job.
+// If the job is succeeded, it returns nil.
+// If the job is failed, it returns JobFailedError.
+// Otherwise, it returns an error.
+// If the context is canceled, it stops gracefully.
+func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Job, opts RunJobOptions) error {
+	if opts.Logger == nil {
+		opts.Logger = defaultLogger{}
+	}
 
 	var backgroundWaiter wait.Group
 	defer func() {
@@ -126,12 +122,4 @@ func Run(ctx context.Context, clientset kubernetes.Interface, opts Options) erro
 		slog.Info("Shutting down")
 		return ctx.Err()
 	}
-}
-
-func printJobYAML(job batchv1.Job) {
-	// Group for GitHub Actions
-	// https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
-	_, _ = fmt.Fprintln(os.Stderr, "::group::Job YAML")
-	jobs.PrintYAML(job, os.Stderr)
-	_, _ = fmt.Fprintln(os.Stderr, "::endgroup::")
 }
