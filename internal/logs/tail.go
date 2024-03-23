@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode"
 
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,7 +23,10 @@ type Record struct {
 	Namespace     string
 	PodName       string
 	ContainerName string
-	Message       string
+
+	// Message is the log line.
+	// All trailing whitespaces are trimmed.
+	Message string
 }
 
 type tailLogger interface {
@@ -83,7 +87,7 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 	for {
 		line, err := reader.ReadString('\n')
 		if line != "" {
-			rawTimestamp, metaTime, message := parseTimestamp(line)
+			rawTimestamp, metaTime, message := parseLine(line)
 			tlog.Handle(Record{
 				RawTimestamp:  rawTimestamp,
 				Namespace:     namespace,
@@ -102,18 +106,20 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 	}
 }
 
-// parseTimestamp returns the timestamp and message of the log line.
+// parseLine parses the line and returns the timestamp and message.
+// It trims all trailing whitespaces in the line.
 // If it cannot parse the timestamp, it returns the whole line.
-func parseTimestamp(line string) (string, *metav1.Time, string) {
-	s := strings.SplitN(line, " ", 2)
+func parseLine(line string) (string, *metav1.Time, string) {
+	trimmedLine := strings.TrimRightFunc(line, unicode.IsSpace)
+	s := strings.SplitN(trimmedLine, " ", 2)
 	if len(s) != 2 {
-		return "", nil, line
+		return "", nil, trimmedLine
 	}
 	rawTimestamp, message := s[0], s[1]
 	t, err := time.Parse(time.RFC3339, rawTimestamp)
 	if err != nil {
 		slog.Debug("Internal error: invalid log timestamp", "error", err, "rawTimestamp", rawTimestamp)
-		return "", nil, line
+		return "", nil, trimmedLine
 	}
 	metaTime := metav1.NewTime(t)
 	return rawTimestamp, &metaTime, message

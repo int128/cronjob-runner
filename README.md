@@ -52,27 +52,29 @@ You can see the actual examples from [e2e-test workflow](https://github.com/int1
 
 ```console
 $ cronjob-runner --cronjob-name simple
-05:00:00.093779 create.go:29: INFO Found the CronJob cronJob.namespace=default cronJob.name=simple
-05:00:00.099071 create.go:55: INFO Created a Job job.namespace=default job.name=simple-rh2dx
-apiVersion: batch/v1
-kind: Job
-# ...snip...
-05:00:00.100613 informer.go:46: INFO Watching Pod job.namespace=default job.name=simple-rh2dx
-05:00:00.100668 informer.go:39: INFO Watching Job job.namespace=default job.name=simple-rh2dx
-05:00:00.102574 informer.go:53: INFO Job is found job.namespace=default job.name=simple-rh2dx
-05:00:09.184628 informer.go:68: INFO Pod is created pod.namespace=default pod.name=simple-rh2dx-24hqx pod.phase=Pending
-05:00:14.505913 informer.go:135: INFO Container is terminated pod.namespace=default pod.name=simple-rh2dx-24hqx container.name=example container.state=Terminated exitCode=0 reason=Completed message=""
-05:00:14.505959 tail.go:32: INFO Tailing the container log pod.namespace=default pod.name=simple-rh2dx-24hqx container.name=example
-|2023-11-05T05:00:13.791930301Z|default|simple-rh2dx-24hqx|example| + echo 'Hello, world!'
-|2023-11-05T05:00:13.791929952Z|default|simple-rh2dx-24hqx|example| Hello, world!
-|2023-11-05T05:00:13.792101232Z|default|simple-rh2dx-24hqx|example| + date
-|2023-11-05T05:00:13.792892713Z|default|simple-rh2dx-24hqx|example| Sun Nov  5 05:00:13 UTC 2023
-|2023-11-05T05:00:13.793053987Z|default|simple-rh2dx-24hqx|example| + uname -a
-|2023-11-05T05:00:13.793787646Z|default|simple-rh2dx-24hqx|example| Linux simple-rh2dx-24hqx 6.2.0-1015-azure #15~22.04.1-Ubuntu SMP Fri Oct  6 13:20:44 UTC 2023 x86_64 GNU/Linux
-|2023-11-05T05:00:13.794049895Z|default|simple-rh2dx-24hqx|example| + exit 0
-05:00:15.633855 informer.go:99: INFO Pod is succeeded pod.namespace=default pod.name=simple-rh2dx-24hqx pod.phase=Succeeded
-05:00:16.643259 informer.go:77: INFO Job is completed job.namespace=default job.name=simple-rh2dx
-05:00:16.643584 main.go:42: INFO Stopped background workers
+05:29:09.163225 main.go:34: INFO Found the CronJob cronJob.namespace=default cronJob.name=simple
+05:29:09.168399 create.go:46: INFO Created a Job job.namespace=default job.name=simple-vww6r
+...
+05:29:09.169854 informer.go:46: INFO Watching Pod job.namespace=default job.name=simple-vww6r
+05:29:09.169929 informer.go:39: INFO Watching Job job.namespace=default job.name=simple-vww6r
+05:29:09.173155 informer.go:53: INFO Job is found job.namespace=default job.name=simple-vww6r
+05:29:21.371217 informer.go:68: INFO Pod is created pod.namespace=default pod.name=simple-vww6r-v876l pod.phase=Pending
+05:29:21.376853 informer.go:125: INFO Pod is not scheduled pod.namespace=default pod.name=simple-vww6r-v876l reason=Unschedulable message="0/1 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/not-ready: }. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling."
+05:29:23.329947 informer.go:122: INFO Pod is scheduled pod.namespace=default pod.name=simple-vww6r-v876l node=kind-control-plane
+05:29:26.862470 informer.go:99: INFO Pod is running pod.namespace=default pod.name=simple-vww6r-v876l pod.phase=Running
+05:29:26.862496 informer.go:181: INFO Container is running pod.namespace=default pod.name=simple-vww6r-v876l container.name=example
+05:29:26.862529 tail.go:49: INFO Tailing the container log pod.namespace=default pod.name=simple-vww6r-v876l container.name=example
++ echo 'Hello, world!'
++ date
+Hello, world!
+Sat Mar 23 05:29:26 UTC 2024
++ uname -a
+Linux simple-vww6r-v876l 6.5.0-1016-azure #16~22.04.1-Ubuntu SMP Fri Feb 16 15:42:02 UTC 2024 x86_64 GNU/Linux
++ exit 0
+05:29:27.798466 informer.go:184: INFO Container is terminated pod.namespace=default pod.name=simple-vww6r-v876l container.name=example exitCode=0 reason=Completed message=""
+05:29:28.885837 informer.go:101: INFO Pod is succeeded pod.namespace=default pod.name=simple-vww6r-v876l pod.phase=Succeeded
+05:29:29.895247 informer.go:81: INFO Job is completed job.namespace=default job.name=simple-vww6r
+05:29:29.895645 run.go:85: INFO Stopped background workers
 ```
 
 This command runs a Job as follows:
