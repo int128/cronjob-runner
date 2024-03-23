@@ -15,35 +15,34 @@ import (
 
 func TestCreateFromCronJob(t *testing.T) {
 	t.Run("as-is", func(t *testing.T) {
-		clientset := fake.NewSimpleClientset(
-			&batchv1.CronJob{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
-					Name:      "example-cronjob",
-				},
-				Spec: batchv1.CronJobSpec{
-					Suspend:  ptr.To(true),
-					Schedule: "@annual",
-					JobTemplate: batchv1.JobTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels:      map[string]string{"my/label": "foo"},
-							Annotations: map[string]string{"my/annotation": "bar"},
-						},
-						Spec: batchv1.JobSpec{
-							BackoffLimit: ptr.To[int32](1),
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									Containers: []corev1.Container{{
-										Name: "example-container",
-									}},
-								},
+		clientset := fake.NewSimpleClientset()
+		cronJob := batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Name:      "example-cronjob",
+			},
+			Spec: batchv1.CronJobSpec{
+				Suspend:  ptr.To(true),
+				Schedule: "@annual",
+				JobTemplate: batchv1.JobTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:      map[string]string{"my/label": "foo"},
+						Annotations: map[string]string{"my/annotation": "bar"},
+					},
+					Spec: batchv1.JobSpec{
+						BackoffLimit: ptr.To[int32](1),
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{
+									Name: "example-container",
+								}},
 							},
 						},
 					},
 				},
 			},
-		)
-		gotJob, err := CreateFromCronJob(context.TODO(), clientset, "default", "example-cronjob", nil)
+		}
+		gotJob, err := CreateFromCronJob(context.TODO(), clientset, &cronJob, nil)
 		if err != nil {
 			t.Fatalf("CreateFromCronJob error: %s", err)
 		}
@@ -77,32 +76,30 @@ func TestCreateFromCronJob(t *testing.T) {
 	})
 
 	t.Run("env is given", func(t *testing.T) {
-		clientset := fake.NewSimpleClientset(
-			&batchv1.CronJob{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
-					Name:      "example-cronjob",
-				},
-				Spec: batchv1.CronJobSpec{
-					Suspend:  ptr.To(true),
-					Schedule: "@annual",
-					JobTemplate: batchv1.JobTemplateSpec{
-						Spec: batchv1.JobSpec{
-							BackoffLimit: ptr.To[int32](1),
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									Containers: []corev1.Container{{
-										Name: "example-container",
-									}},
-								},
+		clientset := fake.NewSimpleClientset()
+		cronJob := batchv1.CronJob{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Name:      "example-cronjob",
+			},
+			Spec: batchv1.CronJobSpec{
+				Suspend:  ptr.To(true),
+				Schedule: "@annual",
+				JobTemplate: batchv1.JobTemplateSpec{
+					Spec: batchv1.JobSpec{
+						BackoffLimit: ptr.To[int32](1),
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{
+									Name: "example-container",
+								}},
 							},
 						},
 					},
 				},
 			},
-		)
-		gotJob, err := CreateFromCronJob(context.TODO(), clientset, "default", "example-cronjob",
-			map[string]string{"FOO": "bar"})
+		}
+		gotJob, err := CreateFromCronJob(context.TODO(), clientset, &cronJob, map[string]string{"FOO": "bar"})
 		if err != nil {
 			t.Fatalf("CreateFromCronJob error: %s", err)
 		}

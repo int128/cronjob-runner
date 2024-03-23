@@ -19,18 +19,9 @@ import (
 func CreateFromCronJob(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-	namespace, cronJobName string,
+	cronJob *batchv1.CronJob,
 	env map[string]string,
 ) (*batchv1.Job, error) {
-	cronJob, err := clientset.BatchV1().CronJobs(namespace).Get(ctx, cronJobName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("get error: %w", err)
-	}
-	slog.Info("Found the CronJob",
-		slog.Group("cronJob",
-			slog.String("namespace", cronJob.Namespace),
-			slog.String("name", cronJob.Name)))
-
 	jobToCreate := batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    cronJob.Namespace,
@@ -48,7 +39,7 @@ func CreateFromCronJob(
 		},
 		Spec: appendEnv(cronJob.Spec.JobTemplate.Spec, env),
 	}
-	job, err := clientset.BatchV1().Jobs(namespace).Create(ctx, &jobToCreate, metav1.CreateOptions{})
+	job, err := clientset.BatchV1().Jobs(cronJob.Namespace).Create(ctx, &jobToCreate, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("create error: %w", err)
 	}
