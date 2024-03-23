@@ -1,6 +1,10 @@
 package runner
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/int128/cronjob-runner/internal/logs"
+)
 
 // JobFailedError represents an error that the Job has failed.
 type JobFailedError struct {
@@ -12,15 +16,23 @@ func (err JobFailedError) Error() string {
 	return fmt.Sprintf("job %s/%s failed", err.JobNamespace, err.JobName)
 }
 
-// Logger is an interface to handle the logs.
-type Logger interface {
-	// PrintContainerLog prints the container log.
-	// It is called by every log line.
-	PrintContainerLog(rawTimestamp, namespace, podName, containerName, message string)
+// ContainerLogRecord represents a record of container logs.
+type ContainerLogRecord = logs.Record
+
+// ContainerLogger is an interface to handle the container logs.
+type ContainerLogger interface {
+	// Handle processes a line of container logs.
+	Handle(record ContainerLogRecord)
 }
 
-type defaultLogger struct{}
+type defaultContainerLogger struct{}
 
-func (defaultLogger) PrintContainerLog(rawTimestamp, namespace, podName, containerName, message string) {
-	fmt.Printf("|%s|%s|%s|%s| %s", rawTimestamp, namespace, podName, containerName, message)
+func (defaultContainerLogger) Handle(record ContainerLogRecord) {
+	fmt.Printf("|%s|%s|%s|%s| %s",
+		record.RawTimestamp,
+		record.Namespace,
+		record.PodName,
+		record.ContainerName,
+		record.Message,
+	)
 }
