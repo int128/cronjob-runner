@@ -30,9 +30,9 @@ type RunCronJobOptions struct {
 	// Optional.
 	Env map[string]string
 
-	// Logger is an implementation of Logger interface.
-	// Default to the defaultLogger.
-	Logger Logger
+	// ContainerLogger is an implementation of ContainerLogger interface.
+	// Default to the defaultContainerLogger.
+	ContainerLogger ContainerLogger
 }
 
 // RunCronJob runs a new Job from the CronJob template.
@@ -47,7 +47,7 @@ func RunCronJob(ctx context.Context, clientset kubernetes.Interface, cronJob *ba
 	}
 	printJobYAML(*job)
 
-	if err := RunJob(ctx, clientset, job, RunJobOptions{Logger: opts.Logger}); err != nil {
+	if err := RunJob(ctx, clientset, job, RunJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
 		return fmt.Errorf("could not run the Job: %w", err)
 	}
 	return nil
@@ -63,9 +63,9 @@ func printJobYAML(job batchv1.Job) {
 
 // RunJobOptions represents a set of options for RunJob.
 type RunJobOptions struct {
-	// Logger is an implementation of Logger interface.
-	// Default to the defaultLogger.
-	Logger Logger
+	// ContainerLogger is an implementation of ContainerLogger interface.
+	// Default to the defaultContainerLogger.
+	ContainerLogger ContainerLogger
 }
 
 // RunJob runs the given Job.
@@ -74,8 +74,8 @@ type RunJobOptions struct {
 // Otherwise, it returns an error.
 // If the context is canceled, it stops gracefully.
 func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Job, opts RunJobOptions) error {
-	if opts.Logger == nil {
-		opts.Logger = defaultLogger{}
+	if opts.ContainerLogger == nil {
+		opts.ContainerLogger = defaultContainerLogger{}
 	}
 
 	var backgroundWaiter wait.Group
@@ -97,7 +97,7 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 		for event := range containerStartedCh {
 			event := event
 			backgroundWaiter.Start(func() {
-				logs.Tail(ctx, clientset, event.Namespace, event.PodName, event.ContainerName, opts.Logger)
+				logs.Tail(ctx, clientset, event.Namespace, event.PodName, event.ContainerName, opts.ContainerLogger)
 			})
 		}
 	})
