@@ -1,11 +1,9 @@
 package jobs
 
 import (
-	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 
 	"github.com/google/go-cmp/cmp"
@@ -13,10 +11,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func TestCreateFromCronJob(t *testing.T) {
+func TestNewFromCronJob(t *testing.T) {
 	t.Run("as-is", func(t *testing.T) {
-		clientset := fake.NewSimpleClientset()
-		cronJob := batchv1.CronJob{
+		cronJob := &batchv1.CronJob{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
 				Name:      "example-cronjob",
@@ -42,10 +39,7 @@ func TestCreateFromCronJob(t *testing.T) {
 				},
 			},
 		}
-		gotJob, err := CreateFromCronJob(context.TODO(), clientset, &cronJob, nil)
-		if err != nil {
-			t.Fatalf("CreateFromCronJob error: %s", err)
-		}
+		gotJob := NewFromCronJob(cronJob, nil)
 		wantJob := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:    "default",
@@ -76,8 +70,7 @@ func TestCreateFromCronJob(t *testing.T) {
 	})
 
 	t.Run("env is given", func(t *testing.T) {
-		clientset := fake.NewSimpleClientset()
-		cronJob := batchv1.CronJob{
+		cronJob := &batchv1.CronJob{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
 				Name:      "example-cronjob",
@@ -99,10 +92,7 @@ func TestCreateFromCronJob(t *testing.T) {
 				},
 			},
 		}
-		gotJob, err := CreateFromCronJob(context.TODO(), clientset, &cronJob, map[string]string{"FOO": "bar"})
-		if err != nil {
-			t.Fatalf("CreateFromCronJob error: %s", err)
-		}
+		gotJob := NewFromCronJob(cronJob, map[string]string{"FOO": "bar"})
 		wantJob := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:    "default",

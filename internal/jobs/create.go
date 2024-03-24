@@ -1,7 +1,6 @@
 package jobs
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,19 +9,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/printers"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 )
 
-// CreateFromCronJob creates a job from the CronJob template.
+// NewFromCronJob creates a job from the CronJob template.
 // If env is given, it injects the environment variables to all containers.
-func CreateFromCronJob(
-	ctx context.Context,
-	clientset kubernetes.Interface,
-	cronJob *batchv1.CronJob,
-	env map[string]string,
-) (*batchv1.Job, error) {
-	jobToCreate := batchv1.Job{
+func NewFromCronJob(cronJob *batchv1.CronJob, env map[string]string) *batchv1.Job {
+	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    cronJob.Namespace,
 			GenerateName: fmt.Sprintf("%s-", cronJob.Name),
@@ -39,15 +32,6 @@ func CreateFromCronJob(
 		},
 		Spec: appendEnv(cronJob.Spec.JobTemplate.Spec, env),
 	}
-	job, err := clientset.BatchV1().Jobs(cronJob.Namespace).Create(ctx, &jobToCreate, metav1.CreateOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("create error: %w", err)
-	}
-	slog.Info("Created a Job",
-		slog.Group("job",
-			slog.String("namespace", job.Namespace),
-			slog.String("name", job.Name)))
-	return job, nil
 }
 
 func appendEnv(jobSpec batchv1.JobSpec, env map[string]string) batchv1.JobSpec {
@@ -71,7 +55,7 @@ func appendEnv(jobSpec batchv1.JobSpec, env map[string]string) batchv1.JobSpec {
 	return *newSpec
 }
 
-func PrintYAML(job batchv1.Job, w io.Writer) {
+func PrintYAML(job *batchv1.Job, w io.Writer) {
 	newJob := job.DeepCopy()
 	// YAMLPrinter requires GVK
 	newJob.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))

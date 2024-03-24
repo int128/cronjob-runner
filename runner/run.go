@@ -1,10 +1,4 @@
 // Package runner provides an interface to run a Job from a CronJob.
-// It runs a new Job as follows:
-//
-// - Create a Job from the job template of CronJob.
-// - Show the statuses of Job, Pod(s) and container(s) when changed.
-// - Tail the log streams of all containers.
-// - Wait for the Job to be completed or failed.
 //
 // CAVEAT: This package is designed for the internal use of cronjob-runner command.
 // The specification may be changed in the future.
@@ -20,11 +14,12 @@ import (
 	"github.com/int128/cronjob-runner/internal/logs"
 	"github.com/int128/cronjob-runner/internal/pods"
 	batchv1 "k8s.io/api/batch/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
-// RunCronJobOptions represents a set of options for RunCronJob.
+// RunCronJobOptions represents a set of options for RunJobFromCronJob.
 type RunCronJobOptions struct {
 	// Env is a map of environment variables injected to all containers of a Pod.
 	// Optional.
@@ -35,30 +30,31 @@ type RunCronJobOptions struct {
 	ContainerLogger ContainerLogger
 }
 
-// RunCronJob runs a new Job from the CronJob template.
+// RunJobFromCronJob creates a Job from the existing CronJob, and waits for the completion.
+//
+// It runs a new Job as follows:
+//
+//   - Create a Job from the CronJob template.
+//   - Run the Job. See RunJob().
+//
 // If the job is succeeded, it returns nil.
 // If the job is failed, it returns JobFailedError.
 // Otherwise, it returns an error.
 // If the context is canceled, it stops gracefully.
-func RunCronJob(ctx context.Context, clientset kubernetes.Interface, cronJob *batchv1.CronJob, opts RunCronJobOptions) error {
-	job, err := jobs.CreateFromCronJob(ctx, clientset, cronJob, opts.Env)
+func RunJobFromCronJob(ctx context.Context, clientset kubernetes.Interface, namespace, cronJobName string, opts RunCronJobOptions) error {
+	cronJob, err := clientset.BatchV1().CronJobs(namespace).Get(ctx, cronJobName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("could not create a Job from CronJob: %w", err)
+		return fmt.Errorf("could not get the CronJob: %w", err)
 	}
-	printJobYAML(*job)
+	slog.Info("Found the CronJob", slog.Group("cronJob",
+		slog.String("namespace", cronJob.Namespace),
+		slog.String("name", cronJob.Name)))
 
+	job := jobs.NewFromCronJob(cronJob, opts.Env)
 	if err := RunJob(ctx, clientset, job, RunJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
 		return fmt.Errorf("could not run the Job: %w", err)
 	}
 	return nil
-}
-
-func printJobYAML(job batchv1.Job) {
-	// Group for GitHub Actions
-	// https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
-	_, _ = fmt.Fprintln(os.Stderr, "::group::Job YAML")
-	jobs.PrintYAML(job, os.Stderr)
-	_, _ = fmt.Fprintln(os.Stderr, "::endgroup::")
 }
 
 // RunJobOptions represents a set of options for RunJob.
@@ -68,7 +64,15 @@ type RunJobOptions struct {
 	ContainerLogger ContainerLogger
 }
 
-// RunJob runs the given Job.
+// RunJob creates the Job and waits for the completion.
+//
+// It runs a new Job as follows:
+//
+//   - Create a Job.
+//   - Show the statuses of Job, Pod(s) and container(s) when changed.
+//   - Tail the log streams of all containers.
+//   - Wait for the Job to be succeeded or failed.
+//
 // If the job is succeeded, it returns nil.
 // If the job is failed, it returns JobFailedError.
 // Otherwise, it returns an error.
@@ -77,6 +81,15 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 	if opts.ContainerLogger == nil {
 		opts.ContainerLogger = defaultContainerLogger{}
 	}
+
+	job, err := clientset.BatchV1().Jobs(job.Namespace).Create(ctx, job, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("could not create a Job: %w", err)
+	}
+	slog.Info("Created a Job", slog.Group("job",
+		slog.String("namespace", job.Namespace),
+		slog.String("name", job.Name)))
+	printJobYAML(job)
 
 	var backgroundWaiter wait.Group
 	defer func() {
@@ -122,4 +135,12 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 		slog.Info("Shutting down")
 		return ctx.Err()
 	}
+}
+
+func printJobYAML(job *batchv1.Job) {
+	// Group for GitHub Actions
+	// https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
+	_, _ = fmt.Fprintln(os.Stderr, "::group::Job YAML")
+	jobs.PrintYAML(job, os.Stderr)
+	_, _ = fmt.Fprintln(os.Stderr, "::endgroup::")
 }
