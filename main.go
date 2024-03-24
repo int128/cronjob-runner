@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/int128/cronjob-runner/runner"
 	"github.com/spf13/pflag"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 )
@@ -27,16 +24,7 @@ func run(clientset kubernetes.Interface, opts options) error {
 	ctx, stopNotifyCtx := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stopNotifyCtx()
 
-	cronJob, err := clientset.BatchV1().CronJobs(opts.Namespace).Get(ctx, opts.CronJobName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("could not get the CronJob: %w", err)
-	}
-	slog.Info("Found the CronJob",
-		slog.Group("cronJob",
-			slog.String("namespace", cronJob.Namespace),
-			slog.String("name", cronJob.Name)))
-
-	return runner.RunCronJob(ctx, clientset, cronJob, opts.RunCronJobOptions)
+	return runner.RunJobFromCronJob(ctx, clientset, opts.Namespace, opts.CronJobName, opts.RunCronJobOptions)
 }
 
 func main() {
