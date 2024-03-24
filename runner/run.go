@@ -91,26 +91,25 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 		slog.String("name", job.Name)))
 	printJobYAML(job)
 
-	var backgroundWaiter wait.Group
+	stopCh := make(chan struct{})
+	containerStartedCh := make(chan pods.ContainerStartedEvent)
+	jobFinishedCh := make(chan batchv1.JobConditionType)
+	var informerWaiter, containerLoggerWaiter wait.Group
 	defer func() {
-		// This must be run after close(chan) to avoid deadlock
-		backgroundWaiter.Wait()
-		slog.Info("Stopped background workers")
+		close(stopCh)
+		informerWaiter.Wait()        // depends on close(stopCh)
+		close(containerStartedCh)    // depends on informerWaiter
+		close(jobFinishedCh)         // depends on informerWaiter
+		containerLoggerWaiter.Wait() // depends on close(containerStartedCh)
+		slog.Info("Stopped all background workers")
 	}()
 
-	jobFinishedCh := make(chan batchv1.JobConditionType)
-	defer close(jobFinishedCh)
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-	containerStartedCh := make(chan pods.ContainerStartedEvent)
-	defer close(containerStartedCh)
-
-	backgroundWaiter.Start(func() {
+	containerLoggerWaiter.Start(func() {
 		// When a container is started, tail the container logs.
-		for event := range containerStartedCh {
-			event := event
-			backgroundWaiter.Start(func() {
-				logs.Tail(ctx, clientset, event.Namespace, event.PodName, event.ContainerName, opts.ContainerLogger)
+		for containerStartedEvent := range containerStartedCh {
+			e := containerStartedEvent
+			containerLoggerWaiter.Start(func() {
+				logs.Tail(ctx, clientset, e.Namespace, e.PodName, e.ContainerName, opts.ContainerLogger)
 			})
 		}
 	})
@@ -118,12 +117,13 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 	if err != nil {
 		return fmt.Errorf("could not start the pod informer: %w", err)
 	}
-	backgroundWaiter.Start(podInformer.Shutdown)
+	informerWaiter.Start(podInformer.Shutdown)
+
 	jobInformer, err := jobs.StartInformer(clientset, job.Namespace, job.Name, stopCh, jobFinishedCh)
 	if err != nil {
 		return fmt.Errorf("could not start the job informer: %w", err)
 	}
-	backgroundWaiter.Start(jobInformer.Shutdown)
+	informerWaiter.Start(jobInformer.Shutdown)
 
 	select {
 	case jobConditionType := <-jobFinishedCh:

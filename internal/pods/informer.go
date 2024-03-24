@@ -12,10 +12,11 @@ import (
 )
 
 type Informer interface {
+	// Shutdown implements informers.SharedInformerFactory#Shutdown
 	Shutdown()
 }
 
-// ContainerStartedEvent is sent when the container is started.
+// ContainerStartedEvent is sent when a container is started.
 type ContainerStartedEvent struct {
 	Namespace     string
 	PodName       string
