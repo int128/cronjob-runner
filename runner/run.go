@@ -92,14 +92,17 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 	printJobYAML(job)
 
 	stopCh := make(chan struct{})
-	jobFinishedCh := make(chan batchv1.JobConditionType)
 	containerStartedCh := make(chan pods.ContainerStartedEvent)
+	jobFinishedCh := make(chan batchv1.JobConditionType)
 	var informerWaiter, containerLoggerWaiter wait.Group
-	defer containerLoggerWaiter.Wait() // must be after close of containerStartedCh
-	defer close(jobFinishedCh)         // must be after informerWaiter
-	defer close(containerStartedCh)    // must be after informerWaiter
-	defer informerWaiter.Wait()        // must be after close of stopCh
-	defer close(stopCh)
+	defer func() {
+		close(stopCh)
+		informerWaiter.Wait()        // depends on close(stopCh)
+		close(containerStartedCh)    // depends on informerWaiter
+		close(jobFinishedCh)         // depends on informerWaiter
+		containerLoggerWaiter.Wait() // depends on close(containerStartedCh)
+		slog.Info("Stopped all background workers")
+	}()
 
 	containerLoggerWaiter.Start(func() {
 		// When a container is started, tail the container logs.
@@ -110,12 +113,12 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 			})
 		}
 	})
-
 	podInformer, err := pods.StartInformer(clientset, job.Namespace, job.Name, stopCh, containerStartedCh)
 	if err != nil {
 		return fmt.Errorf("could not start the pod informer: %w", err)
 	}
 	informerWaiter.Start(podInformer.Shutdown)
+
 	jobInformer, err := jobs.StartInformer(clientset, job.Namespace, job.Name, stopCh, jobFinishedCh)
 	if err != nil {
 		return fmt.Errorf("could not start the job informer: %w", err)
