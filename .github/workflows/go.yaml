@@ -20,7 +20,7 @@ on:
 
 jobs:
   check:
-    uses: int128/go-workflows/.github/workflows/check.yaml@v0.3.0
+    uses: int128/go-workflows/.github/workflows/check.yaml@v0.4.0
     permissions:
       contents: write
       pull-requests: write
