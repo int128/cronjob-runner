@@ -39,6 +39,7 @@ jobs:
         with:
           go-version-file: tools/go.mod
           cache-dependency-path: tools/go.sum
+      - run: go mod tidy
       - run: make lint
 
   generate:
