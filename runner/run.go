@@ -132,7 +132,12 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 		}
 		return nil
 	case <-ctx.Done():
-		slog.Info("Shutting down")
+		ctx := context.Background()
+		slog.Info("Cancelling the Job")
+		if err := jobs.Cancel(ctx, clientset, job.Namespace, job.Name); err != nil {
+			return fmt.Errorf("could not cancel the Job: %w", err)
+		}
+		slog.Info("Cancelled the Job")
 		return ctx.Err()
 	}
 }
