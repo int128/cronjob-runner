@@ -22,3 +22,5 @@ go.work
 
 # GoLand
 .idea/
+
+/tools/bin/
