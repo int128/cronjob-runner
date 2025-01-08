@@ -105,13 +105,9 @@ func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Jo
 	}()
 
 	containerLoggerWaiter.Start(func() {
-		// When a container is started, tail the container logs.
-		for containerStartedEvent := range containerStartedCh {
-			e := containerStartedEvent
-			containerLoggerWaiter.Start(func() {
-				logs.Tail(ctx, clientset, e.Namespace, e.PodName, e.ContainerName, opts.ContainerLogger)
-			})
-		}
+		containerLoggerWaiter.Start(func() {
+			logs.Tail(ctx, clientset, job.Namespace, job.Name, opts.ContainerLogger)
+		})
 	})
 	podInformer, err := pods.StartInformer(clientset, job.Namespace, job.Name, stopCh, containerStartedCh)
 	if err != nil {

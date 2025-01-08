@@ -37,19 +37,19 @@ type tailLogger interface {
 //   - Reached to EOF
 //   - The Pod is not found (already removed from Node)
 //   - The context is canceled
-func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string, tlog tailLogger) {
+func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName string, tlog tailLogger) {
 	logger := slog.With(
 		slog.Group("pod",
 			slog.String("namespace", namespace),
 			slog.String("name", podName),
 		),
 		slog.Group("container",
-			slog.String("name", containerName),
+			slog.String("name", podName),
 		))
 	logger.Info("Tailing the container log")
 	var t tailer
 	for {
-		err := t.resume(ctx, clientset, namespace, podName, containerName, tlog)
+		err := t.resume(ctx, clientset, namespace, podName, tlog)
 		if err == nil {
 			return
 		}
@@ -70,10 +70,27 @@ type tailer struct {
 	lastLogTime *metav1.Time
 }
 
-func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string, tlog tailLogger) error {
-	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container: containerName,
-		Follow:    true,
+func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, jobname string, tlog tailLogger) error {
+	listOptions := metav1.ListOptions{
+		LabelSelector: "job-name=" + jobname,
+	}
+	podNames := []string{}
+	for {
+		pods, err := clientset.CoreV1().Pods(namespace).List(ctx, listOptions)
+		if err != nil {
+			fmt.Printf("Error listing pods: %v\n", err)
+			time.Sleep(5 * time.Second) // Delay before retrying
+			continue
+		}
+		if len(pods.Items) > 0 {
+			for _, pod := range pods.Items {
+				podNames = append(podNames, pod.Name)
+			}
+			break // Exit the loop once pods are found
+		}
+	}
+	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(podNames[0], &corev1.PodLogOptions{
+		Follow: true,
 		// Get the timestamp to resume from the last point when the connection is lost.
 		Timestamps: true,
 		SinceTime:  t.lastLogTime,
@@ -91,8 +108,8 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 			tlog.Handle(Record{
 				RawTimestamp:  rawTimestamp,
 				Namespace:     namespace,
-				PodName:       podName,
-				ContainerName: containerName,
+				PodName:       podNames[0],
+				ContainerName: jobname,
 				Message:       message,
 			})
 			t.lastLogTime = metaTime
