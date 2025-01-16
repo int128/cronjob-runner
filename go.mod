@@ -1,6 +1,6 @@
 module github.com/int128/cronjob-runner
 
-go 1.23.4
+go 1.23.5
 
 require (
 	github.com/google/go-cmp v0.6.0
