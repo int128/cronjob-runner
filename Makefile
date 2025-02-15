@@ -7,5 +7,4 @@ test:
 
 .PHONY: lint
 lint:
-	$(MAKE) -C tools
-	./tools/bin/golangci-lint run --timeout=5m
+	go tool github.com/golangci/golangci-lint/cmd/golangci-lint run --timeout 5m
