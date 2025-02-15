@@ -7,4 +7,4 @@ test:
 
 .PHONY: lint
 lint:
-	go tool github.com/golangci/golangci-lint/cmd/golangci-lint run
+	go tool github.com/golangci/golangci-lint/cmd/golangci-lint run --timeout 5m
