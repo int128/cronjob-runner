@@ -241,4 +241,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-tool github.com/golangci/golangci-lint/cmd/golangci-lint
+tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
