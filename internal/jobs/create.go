@@ -60,7 +60,7 @@ func PrintYAML(job *batchv1.Job, w io.Writer) {
 	// YAMLPrinter requires GVK
 	newJob.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))
 	// Hide the managed fields
-	newJob.ObjectMeta.SetManagedFields(nil)
+	newJob.SetManagedFields(nil)
 	var printer printers.YAMLPrinter
 	if err := printer.PrintObj(newJob, w); err != nil {
 		slog.Warn("Internal error: printer.PrintObj", "error", err)

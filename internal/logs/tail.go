@@ -81,7 +81,11 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 	if err != nil {
 		return fmt.Errorf("stream error: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slog.Error("Failed to close the stream", "error", err)
+		}
+	}()
 
 	reader := bufio.NewReader(stream)
 	for {
