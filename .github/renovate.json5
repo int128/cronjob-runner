@@ -6,5 +6,6 @@
     "github>int128/go-renovate-config:go-directive#v1.7.2",
     "github>int128/go-renovate-config:github-actions#v1.7.2",
     "github>int128/go-renovate-config:kubernetes#v1.7.2",
+    "helpers:pinGitHubActionDigests",
   ],
 }
