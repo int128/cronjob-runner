@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -36,7 +36,10 @@ func StartInformer(
 		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
 	}
 	informerFactory.Start(stopCh)
-	log.Printf("Watching the job %s/%s", namespace, jobName)
+	slog.Info("Watching Job",
+		slog.Group("job",
+			slog.String("namespace", namespace),
+			slog.String("name", jobName)))
 	return informerFactory, nil
 }
 
@@ -44,43 +47,87 @@ type eventHandler struct {
 	finishedCh chan<- batchv1.JobConditionType
 }
 
-func (h *eventHandler) OnAdd(obj interface{}, _ bool) {
+func (h *eventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 	job := obj.(*batchv1.Job)
-	log.Printf("Job %s/%s is created", job.Namespace, job.Name)
-}
-
-func (h *eventHandler) OnUpdate(_, newObj interface{}) {
-	job := newObj.(*batchv1.Job)
-	condition := findCondition(job)
-	if condition == nil {
+	if isInInitialList {
+		slog.Info("Job is found",
+			slog.Group("job",
+				slog.String("namespace", job.Namespace),
+				slog.String("name", job.Name)))
 		return
 	}
-	log.Printf("Job %s/%s is %s %s", job.Namespace, job.Name, condition.Type, formatConditionMessage(condition))
-	if condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed {
-		h.finishedCh <- condition.Type
-	}
+	slog.Info("Job is created",
+		slog.Group("job",
+			slog.String("namespace", job.Namespace),
+			slog.String("name", job.Name)))
 }
 
-func findCondition(job *batchv1.Job) *batchv1.JobCondition {
-	for _, condition := range job.Status.Conditions {
-		if condition.Status == corev1.ConditionTrue {
-			return &condition
+func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
+	oldJob := oldObj.(*batchv1.Job)
+	newJob := newObj.(*batchv1.Job)
+	notifyConditionChange(oldJob, newJob)
+	notifyFinished(oldJob, newJob, h.finishedCh)
+}
+
+func notifyConditionChange(oldJob, newJob *batchv1.Job) {
+	changedConditions := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
+	jobAttr := slog.Group("job",
+		slog.String("namespace", newJob.Namespace),
+		slog.String("name", newJob.Name),
+	)
+	for conditionType, condition := range changedConditions {
+		switch conditionType {
+		case batchv1.JobComplete:
+			slog.Info("Job is completed", jobAttr)
+		case batchv1.JobFailed:
+			slog.Info("Job is failed", jobAttr,
+				slog.String("reason", condition.Reason),
+				slog.String("message", condition.Message))
+		default:
+			slog.Info("Job condition is changed", jobAttr,
+				slog.Any("conditionType", condition.Type),
+				slog.String("reason", condition.Reason),
+				slog.String("message", condition.Message))
 		}
 	}
-	return nil
 }
 
-func formatConditionMessage(condition *batchv1.JobCondition) string {
-	if condition.Message == "" && condition.Reason == "" {
-		return ""
+func notifyFinished(oldJob, newJob *batchv1.Job, finishedCh chan<- batchv1.JobConditionType) {
+	changedConditions := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
+	for conditionType := range changedConditions {
+		if conditionType == batchv1.JobComplete || conditionType == batchv1.JobFailed {
+			finishedCh <- conditionType
+			return
+		}
 	}
-	if condition.Message == "" {
-		return fmt.Sprintf("(%s)", condition.Reason)
+}
+
+func findChangedConditionsToTrue(oldConditions, newConditions []batchv1.JobCondition) map[batchv1.JobConditionType]batchv1.JobCondition {
+	changed := make(map[batchv1.JobConditionType]batchv1.JobCondition)
+	oldMap := mapConditionByType(oldConditions)
+	newMap := mapConditionByType(newConditions)
+	for conditionType := range newMap {
+		oldCondition := oldMap[conditionType]
+		newCondition := newMap[conditionType]
+		if oldCondition.Status != newCondition.Status && newCondition.Status == corev1.ConditionTrue {
+			changed[conditionType] = newCondition
+		}
 	}
-	return fmt.Sprintf("(%s: %s)", condition.Reason, condition.Message)
+	return changed
+}
+
+func mapConditionByType(conditions []batchv1.JobCondition) map[batchv1.JobConditionType]batchv1.JobCondition {
+	m := make(map[batchv1.JobConditionType]batchv1.JobCondition)
+	for _, condition := range conditions {
+		m[condition.Type] = condition
+	}
+	return m
 }
 
 func (h *eventHandler) OnDelete(obj interface{}) {
 	job := obj.(*batchv1.Job)
-	log.Printf("Job %s/%s is deleted", job.Namespace, job.Name)
+	slog.Info("Job is deleted",
+		slog.Group("job",
+			slog.String("namespace", job.Namespace),
+			slog.String("name", job.Name)))
 }

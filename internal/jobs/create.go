@@ -1,40 +1,21 @@
 package jobs
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/printers"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
-type CreateOptions struct {
-	Env       map[string]string
-	SecretEnv []string
-	Secret    corev1.LocalObjectReference
-}
-
-// CreateFromCronJob creates a job from the CronJob template.
+// NewFromCronJob creates a job from the CronJob template.
 // If env is given, it injects the environment variables to all containers.
-func CreateFromCronJob(
-	ctx context.Context,
-	clientset kubernetes.Interface,
-	namespace, cronJobName string,
-	opts CreateOptions,
-) (*batchv1.Job, error) {
-	cronJob, err := clientset.BatchV1().CronJobs(namespace).Get(ctx, cronJobName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("get error: %w", err)
-	}
-	log.Printf("Found the CronJob %s/%s", cronJob.Namespace, cronJob.Name)
-
-	jobToCreate := batchv1.Job{
+func NewFromCronJob(cronJob *batchv1.CronJob, env map[string]string, secret corev1.LocalObjectReference, secretEnv []string) *batchv1.Job {
+	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    cronJob.Namespace,
 			GenerateName: fmt.Sprintf("%s-", cronJob.Name),
@@ -44,19 +25,13 @@ func CreateFromCronJob(
 				Kind:       "CronJob",
 				Name:       cronJob.GetName(),
 				UID:        cronJob.GetUID(),
-				Controller: pointer.Bool(true),
+				Controller: ptr.To(true),
 			}},
 			Labels:      cronJob.Spec.JobTemplate.Labels,
 			Annotations: cronJob.Spec.JobTemplate.Annotations,
 		},
-		Spec: appendSecretEnv(appendEnv(cronJob.Spec.JobTemplate.Spec, opts.Env), opts.Secret, opts.SecretEnv),
+		Spec: appendSecretEnv(appendEnv(cronJob.Spec.JobTemplate.Spec, env), secret, secretEnv),
 	}
-	job, err := clientset.BatchV1().Jobs(namespace).Create(ctx, &jobToCreate, metav1.CreateOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("create error: %w", err)
-	}
-	log.Printf("Created a Job %s/%s", job.Namespace, job.Name)
-	return job, nil
 }
 
 func appendEnv(jobSpec batchv1.JobSpec, env map[string]string) batchv1.JobSpec {
@@ -106,14 +81,14 @@ func appendSecretEnv(jobSpec batchv1.JobSpec, secret corev1.LocalObjectReference
 	return *newSpec
 }
 
-func PrintYAML(job batchv1.Job, w io.Writer) {
+func PrintYAML(job *batchv1.Job, w io.Writer) {
 	newJob := job.DeepCopy()
 	// YAMLPrinter requires GVK
 	newJob.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))
 	// Hide the managed fields
-	newJob.ObjectMeta.SetManagedFields(nil)
+	newJob.SetManagedFields(nil)
 	var printer printers.YAMLPrinter
 	if err := printer.PrintObj(newJob, w); err != nil {
-		log.Printf("Internal error: printer.PrintObj: %s", err)
+		slog.Warn("Internal error: printer.PrintObj", "error", err)
 	}
 }

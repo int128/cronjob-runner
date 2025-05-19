@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
+	"unicode"
 
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,27 +17,51 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// Record represents a record of container logs.
+type Record struct {
+	RawTimestamp  string
+	Namespace     string
+	PodName       string
+	ContainerName string
+
+	// Message is the log line.
+	// All trailing whitespaces are trimmed.
+	Message string
+}
+
+type tailLogger interface {
+	Handle(record Record)
+}
+
 // Tail tails the container log until the following cases:
 //   - Reached to EOF
 //   - The Pod is not found (already removed from Node)
 //   - The context is canceled
-func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) {
-	log.Printf("Tailing the container log of %s/%s/%s", namespace, podName, containerName)
+func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string, tlog tailLogger) {
+	logger := slog.With(
+		slog.Group("pod",
+			slog.String("namespace", namespace),
+			slog.String("name", podName),
+		),
+		slog.Group("container",
+			slog.String("name", containerName),
+		))
+	logger.Info("Tailing the container log")
 	var t tailer
 	for {
-		err := t.resume(ctx, clientset, namespace, podName, containerName)
+		err := t.resume(ctx, clientset, namespace, podName, containerName, tlog)
 		if err == nil {
 			return
 		}
 		if kerrors.IsNotFound(err) {
-			log.Printf("Pod %s/%s was deleted before reached to EOF of the container log: %s", namespace, podName, err)
+			logger.Warn("Pod was deleted before reached to EOF of the container log", "error", err)
 			return
 		}
 		if errors.Is(err, context.Canceled) {
-			log.Printf("Stopped tailing the container log of %s/%s/%s before reached to EOF: %s", namespace, podName, containerName, err)
+			logger.Warn("Stopped tailing the container log before reached to EOF", "error", err)
 			return
 		}
-		log.Printf("Retrying to tail the container log of %s/%s/%s: %s", namespace, podName, containerName, err)
+		logger.Warn("Retrying to tail the container log", "error", err)
 		time.Sleep(100 * time.Millisecond)
 	}
 }
@@ -45,7 +70,7 @@ type tailer struct {
 	lastLogTime *metav1.Time
 }
 
-func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string) error {
+func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string, tlog tailLogger) error {
 	stream, err := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: containerName,
 		Follow:    true,
@@ -56,14 +81,24 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 	if err != nil {
 		return fmt.Errorf("stream error: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slog.Error("Failed to close the stream", "error", err)
+		}
+	}()
 
 	reader := bufio.NewReader(stream)
 	for {
 		line, err := reader.ReadString('\n')
 		if line != "" {
-			rawTimestamp, metaTime, message := parseTimestamp(line)
-			fmt.Printf("%s | %s/%s/%s | %s", rawTimestamp, namespace, podName, containerName, message)
+			rawTimestamp, metaTime, message := parseLine(line)
+			tlog.Handle(Record{
+				RawTimestamp:  rawTimestamp,
+				Namespace:     namespace,
+				PodName:       podName,
+				ContainerName: containerName,
+				Message:       message,
+			})
 			t.lastLogTime = metaTime
 		}
 		if err == io.EOF {
@@ -75,18 +110,20 @@ func (t *tailer) resume(ctx context.Context, clientset kubernetes.Interface, nam
 	}
 }
 
-// parseTimestamp returns the timestamp and message of the log line.
+// parseLine parses the line and returns the timestamp and message.
+// It trims all trailing whitespaces in the line.
 // If it cannot parse the timestamp, it returns the whole line.
-func parseTimestamp(line string) (string, *metav1.Time, string) {
-	s := strings.SplitN(line, " ", 2)
+func parseLine(line string) (string, *metav1.Time, string) {
+	trimmedLine := strings.TrimRightFunc(line, unicode.IsSpace)
+	s := strings.SplitN(trimmedLine, " ", 2)
 	if len(s) != 2 {
-		return "", nil, line
+		return "", nil, trimmedLine
 	}
 	rawTimestamp, message := s[0], s[1]
 	t, err := time.Parse(time.RFC3339, rawTimestamp)
 	if err != nil {
-		log.Printf("Internal error: invalid log timestamp: %s", err)
-		return "", nil, line
+		slog.Debug("Internal error: invalid log timestamp", "error", err, "rawTimestamp", rawTimestamp)
+		return "", nil, trimmedLine
 	}
 	metaTime := metav1.NewTime(t)
 	return rawTimestamp, &metaTime, message
