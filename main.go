@@ -29,17 +29,25 @@ func run(clientset kubernetes.Interface, opts options) error {
 
 func main() {
 	log.SetFlags(log.Lmicroseconds | log.Lshortfile)
+
 	var opts options
+	var secretEnvKeys []string
 	pflag.StringVar(&opts.CronJobName, "cronjob-name", "", "Name of CronJob")
 	pflag.StringToStringVar(&opts.Env, "env", nil,
 		"Environment variables to set into the all containers, in the form of KEY=VALUE")
-	pflag.StringToStringVar(&opts.SecretEnv, "secret-env", nil,
-		"Environment variables of secrets to set into the all containers, in the form of KEY=VALUE")
+	pflag.StringArrayVar(&secretEnvKeys, "secret-env", nil,
+		"Environment variable keys of secrets to set into the all containers")
 	kubernetesFlags := genericclioptions.NewConfigFlags(false)
 	kubernetesFlags.AddFlags(pflag.CommandLine)
 	pflag.Parse()
 	if opts.CronJobName == "" {
 		log.Fatalf("You need to set --cronjob-name")
+	}
+	if len(secretEnvKeys) > 0 {
+		opts.SecretEnv = make(map[string]string, len(secretEnvKeys))
+		for _, key := range secretEnvKeys {
+			opts.SecretEnv[key] = os.Getenv(key)
+		}
 	}
 
 	restCfg, err := kubernetesFlags.ToRESTConfig()

@@ -44,7 +44,7 @@ type RunCronJobOptions struct {
 //
 //   - Create a Secret if RunCronJobOptions.SecretEnv is set.
 //   - Create a Job from the CronJob template.
-//   - Run the Job. See WaitForJob().
+//   - Wait for the Job. See WaitForJob().
 //
 // If the job is succeeded, it returns nil.
 // If the job is failed, it returns JobFailedError.
@@ -66,14 +66,15 @@ func RunJobFromCronJob(ctx context.Context, clientset kubernetes.Interface, name
 		return nil
 	}
 
-	jobToCreate := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, nil)
-	job, err := clientset.BatchV1().Jobs(jobToCreate.Namespace).Create(ctx, jobToCreate, metav1.CreateOptions{})
+	job, err := clientset.BatchV1().Jobs(namespace).Create(ctx,
+		jobs.NewFromCronJob(cronJob, opts.Env, nil, nil),
+		metav1.CreateOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("could not create a Job: %w", err)
 	}
-	slog.Info("Created a Job", slog.Group("job",
-		slog.String("namespace", job.Namespace),
-		slog.String("name", job.Name)))
+	slog.Info("Created a Job",
+		slog.Group("job", slog.String("namespace", job.Namespace), slog.String("name", job.Name)))
 	printJobYAML(job)
 
 	if err := WaitForJob(ctx, clientset, job, WaitForJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
@@ -94,31 +95,28 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 	if err != nil {
 		return fmt.Errorf("create a Secret: %w", err)
 	}
-	slog.Info("Created a Secret", slog.Group("secret",
-		"namespace", secret.Namespace,
-		"name", secret.Name))
+	slog.Info("Created a Secret",
+		slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
 
 	defer func() {
 		if err := clientset.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil {
-			slog.Warn("Could not clean up the Secret", slog.Group("secret",
-				"namespace", secret.Namespace,
-				"name", secret.Name))
+			slog.Warn("Could not clean up the Secret",
+				slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
 			return
 		}
-		slog.Info("Cleaned up the Secret", slog.Group("secret",
-			"namespace", secret.Namespace,
-			"name", secret.Name))
+		slog.Info("Cleaned up the Secret",
+			slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
 	}()
 
-	secretRef := &corev1.LocalObjectReference{Name: secret.Name}
-	jobToCreate := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, secretRef)
-	job, err := clientset.BatchV1().Jobs(jobToCreate.Namespace).Create(ctx, jobToCreate, metav1.CreateOptions{})
+	job, err := clientset.BatchV1().Jobs(cronJob.Namespace).Create(ctx,
+		jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, &corev1.LocalObjectReference{Name: secret.Name}),
+		metav1.CreateOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("could not create a Job: %w", err)
 	}
-	slog.Info("Created a Job", slog.Group("job",
-		slog.String("namespace", job.Namespace),
-		slog.String("name", job.Name)))
+	slog.Info("Created a Job",
+		slog.Group("job", slog.String("namespace", job.Namespace), slog.String("name", job.Name)))
 	printJobYAML(job)
 
 	secret, err = clientset.CoreV1().Secrets(cronJob.Namespace).Apply(ctx,
@@ -135,9 +133,8 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 	if err != nil {
 		return fmt.Errorf("apply the owner reference to the Secret: %w", err)
 	}
-	slog.Info("Applied the owner reference to the Secret", slog.Group("secret",
-		"namespace", secret.Namespace,
-		"name", secret.Name))
+	slog.Info("Applied the owner reference to the Secret",
+		slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
 
 	if err := WaitForJob(ctx, clientset, job, WaitForJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
 		return fmt.Errorf("run the Job: %w", err)
