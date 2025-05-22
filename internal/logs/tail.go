@@ -39,13 +39,9 @@ type tailLogger interface {
 //   - The context is canceled
 func Tail(ctx context.Context, clientset kubernetes.Interface, namespace, podName, containerName string, tlog tailLogger) {
 	logger := slog.With(
-		slog.Group("pod",
-			slog.String("namespace", namespace),
-			slog.String("name", podName),
-		),
-		slog.Group("container",
-			slog.String("name", containerName),
-		))
+		slog.Group("pod", slog.String("namespace", namespace), slog.String("name", podName)),
+		slog.Group("container", slog.String("name", containerName)),
+	)
 	logger.Info("Tailing the container log")
 	var t tailer
 	for {

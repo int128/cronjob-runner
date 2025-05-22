@@ -41,13 +41,11 @@ func StartInformer(
 	)
 	informer := informerFactory.Core().V1().Pods().Informer()
 	if _, err := informer.AddEventHandler(&eventHandler{containerStartedCh: containerStartedCh}); err != nil {
-		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
+		return nil, fmt.Errorf("add an event handler to the informer: %w", err)
 	}
 	informerFactory.Start(stopCh)
 	slog.Info("Watching Pod",
-		slog.Group("job",
-			slog.String("namespace", namespace),
-			slog.String("name", jobName)))
+		slog.Group("job", slog.String("namespace", namespace), slog.String("name", jobName)))
 	return informerFactory, nil
 }
 
@@ -57,21 +55,12 @@ type eventHandler struct {
 
 func (h *eventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 	pod := obj.(*corev1.Pod)
+	podAttr := slog.Group("pod", slog.String("namespace", pod.Namespace), slog.String("name", pod.Name), slog.Any("phase", pod.Status.Phase))
 	if isInInitialList {
-		slog.Info("Pod is found",
-			slog.Group("pod",
-				slog.String("namespace", pod.Namespace),
-				slog.String("name", pod.Name),
-				slog.Any("phase", pod.Status.Phase),
-			))
+		slog.Info("Pod is found", podAttr)
 		return
 	}
-	slog.Info("Pod is created",
-		slog.Group("pod",
-			slog.String("namespace", pod.Namespace),
-			slog.String("name", pod.Name),
-			slog.Any("phase", pod.Status.Phase),
-		))
+	slog.Info("Pod is created", podAttr)
 }
 
 func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
@@ -90,11 +79,7 @@ func (h *eventHandler) notifyPodStatusChange(oldPod, newPod *corev1.Pod) {
 	if oldPod.Status.Phase == newPod.Status.Phase {
 		return
 	}
-	podAttr := slog.Group("pod",
-		slog.String("namespace", newPod.Namespace),
-		slog.String("name", newPod.Name),
-		slog.Any("phase", newPod.Status.Phase),
-	)
+	podAttr := slog.Group("pod", slog.String("namespace", newPod.Namespace), slog.String("name", newPod.Name), slog.Any("phase", newPod.Status.Phase))
 	switch newPod.Status.Phase {
 	case corev1.PodRunning:
 		slog.Info("Pod is running", podAttr)
@@ -114,27 +99,20 @@ func (h *eventHandler) notifyPodStatusChange(oldPod, newPod *corev1.Pod) {
 }
 
 func (h *eventHandler) notifyPodConditionScheduled(oldPod, newPod *corev1.Pod) {
-	podAttr := slog.Group("pod",
-		slog.String("namespace", newPod.Namespace),
-		slog.String("name", newPod.Name),
-	)
+	podAttr := slog.Group("pod", slog.String("namespace", newPod.Namespace), slog.String("name", newPod.Name))
 	condition := findChangedPodConditionByType(corev1.PodScheduled, oldPod.Status.Conditions, newPod.Status.Conditions)
 	if condition.Status == corev1.ConditionTrue {
 		slog.Info("Pod is scheduled", podAttr, slog.String("node", newPod.Spec.NodeName))
 	}
 	if condition.Status == corev1.ConditionFalse {
-		slog.Info("Pod is not scheduled", podAttr,
+		slog.Info("Pod is scheduling", podAttr,
 			slog.String("reason", condition.Reason),
 			slog.String("message", condition.Message))
 	}
 }
 
 func (h *eventHandler) notifyPodConditionDisruptionTarget(oldPod, newPod *corev1.Pod) {
-	podAttr := slog.Group("pod",
-		slog.String("namespace", newPod.Namespace),
-		slog.String("name", newPod.Name),
-		slog.String("node", newPod.Spec.NodeName),
-	)
+	podAttr := slog.Group("pod", slog.String("namespace", newPod.Namespace), slog.String("name", newPod.Name), slog.String("node", newPod.Spec.NodeName))
 	condition := findChangedPodConditionByType(corev1.DisruptionTarget, oldPod.Status.Conditions, newPod.Status.Conditions)
 	if condition.Status == corev1.ConditionTrue {
 		slog.Info("Pod will be terminated due to a disruption", podAttr,
@@ -164,13 +142,8 @@ func findPodConditionByType(conditionType corev1.PodConditionType, conditions []
 func (h *eventHandler) notifyContainerStatusChanges(namespace, podName string, oldStatuses, newStatuses []corev1.ContainerStatus) {
 	containerStateChanges := computeContainerStateChanges(oldStatuses, newStatuses)
 	for _, change := range containerStateChanges {
-		podAttr := slog.Group("pod",
-			slog.String("namespace", namespace),
-			slog.String("name", podName),
-		)
-		containerAttr := slog.Group("container",
-			slog.String("name", change.newStatus.Name),
-		)
+		podAttr := slog.Group("pod", slog.String("namespace", namespace), slog.String("name", podName))
+		containerAttr := slog.Group("container", slog.String("name", change.newStatus.Name))
 		switch change.newState {
 		case containerStateWaiting:
 			waiting := change.newStatus.State.Waiting
@@ -271,7 +244,5 @@ func getContainerState(containerStatus corev1.ContainerStatus) containerState {
 func (h *eventHandler) OnDelete(obj interface{}) {
 	pod := obj.(*corev1.Pod)
 	slog.Info("Pod is deleted",
-		slog.Group("pod",
-			slog.String("namespace", pod.Namespace),
-			slog.String("name", pod.Name)))
+		slog.Group("pod", slog.String("namespace", pod.Namespace), slog.String("name", pod.Name)))
 }

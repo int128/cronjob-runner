@@ -33,13 +33,11 @@ func StartInformer(
 	)
 	informer := informerFactory.Batch().V1().Jobs().Informer()
 	if _, err := informer.AddEventHandler(&eventHandler{finishedCh: finishedCh}); err != nil {
-		return nil, fmt.Errorf("could not add an event handler to the informer: %w", err)
+		return nil, fmt.Errorf("add an event handler to the informer: %w", err)
 	}
 	informerFactory.Start(stopCh)
 	slog.Info("Watching Job",
-		slog.Group("job",
-			slog.String("namespace", namespace),
-			slog.String("name", jobName)))
+		slog.Group("job", slog.String("namespace", namespace), slog.String("name", jobName)))
 	return informerFactory, nil
 }
 
@@ -47,19 +45,14 @@ type eventHandler struct {
 	finishedCh chan<- batchv1.JobConditionType
 }
 
-func (h *eventHandler) OnAdd(obj interface{}, isInInitialList bool) {
+func (h *eventHandler) OnAdd(obj any, isInInitialList bool) {
 	job := obj.(*batchv1.Job)
+	jobAttr := slog.Group("job", slog.String("namespace", job.Namespace), slog.String("name", job.Name))
 	if isInInitialList {
-		slog.Info("Job is found",
-			slog.Group("job",
-				slog.String("namespace", job.Namespace),
-				slog.String("name", job.Name)))
+		slog.Info("Job is found", jobAttr)
 		return
 	}
-	slog.Info("Job is created",
-		slog.Group("job",
-			slog.String("namespace", job.Namespace),
-			slog.String("name", job.Name)))
+	slog.Info("Job is created", jobAttr)
 }
 
 func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
@@ -71,10 +64,7 @@ func (h *eventHandler) OnUpdate(oldObj, newObj interface{}) {
 
 func notifyConditionChange(oldJob, newJob *batchv1.Job) {
 	changedConditions := findChangedConditionsToTrue(oldJob.Status.Conditions, newJob.Status.Conditions)
-	jobAttr := slog.Group("job",
-		slog.String("namespace", newJob.Namespace),
-		slog.String("name", newJob.Name),
-	)
+	jobAttr := slog.Group("job", slog.String("namespace", newJob.Namespace), slog.String("name", newJob.Name))
 	for conditionType, condition := range changedConditions {
 		switch conditionType {
 		case batchv1.JobComplete:
@@ -127,7 +117,5 @@ func mapConditionByType(conditions []batchv1.JobCondition) map[batchv1.JobCondit
 func (h *eventHandler) OnDelete(obj interface{}) {
 	job := obj.(*batchv1.Job)
 	slog.Info("Job is deleted",
-		slog.Group("job",
-			slog.String("namespace", job.Namespace),
-			slog.String("name", job.Name)))
+		slog.Group("job", slog.String("namespace", job.Namespace), slog.String("name", job.Name)))
 }

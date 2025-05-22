@@ -52,15 +52,15 @@ func main() {
 
 	restCfg, err := kubernetesFlags.ToRESTConfig()
 	if err != nil {
-		log.Fatalf("Could not load the Kubernetes config: %s", err)
+		log.Fatalf("Failed to load the Kubernetes config: %s", err)
 	}
 	clientset, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
-		log.Fatalf("Could not create a Kubernetes client: %s", err)
+		log.Fatalf("Failed to create a Kubernetes client: %s", err)
 	}
 	opts.Namespace, _, err = kubernetesFlags.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
-		log.Fatalf("Could not determine the namespace: %s", err)
+		log.Fatalf("Failed to determine the namespace: %s", err)
 	}
 
 	if err := run(clientset, opts); err != nil {

@@ -53,11 +53,10 @@ type RunCronJobOptions struct {
 func RunJobFromCronJob(ctx context.Context, clientset kubernetes.Interface, namespace, cronJobName string, opts RunCronJobOptions) error {
 	cronJob, err := clientset.BatchV1().CronJobs(namespace).Get(ctx, cronJobName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("could not get the CronJob: %w", err)
+		return fmt.Errorf("get the CronJob: %w", err)
 	}
-	slog.Info("Found the CronJob", slog.Group("cronJob",
-		slog.String("namespace", cronJob.Namespace),
-		slog.String("name", cronJob.Name)))
+	slog.Info("Found the CronJob",
+		slog.Group("cronJob", slog.String("namespace", cronJob.Namespace), slog.String("name", cronJob.Name)))
 
 	if len(opts.SecretEnv) > 0 {
 		if err := runJobFromCronJobWithSecret(ctx, clientset, cronJob, opts); err != nil {
@@ -71,7 +70,7 @@ func RunJobFromCronJob(ctx context.Context, clientset kubernetes.Interface, name
 		metav1.CreateOptions{},
 	)
 	if err != nil {
-		return fmt.Errorf("could not create a Job: %w", err)
+		return fmt.Errorf("create a Job: %w", err)
 	}
 	slog.Info("Created a Job",
 		slog.Group("job", slog.String("namespace", job.Namespace), slog.String("name", job.Name)))
@@ -95,18 +94,15 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 	if err != nil {
 		return fmt.Errorf("create a Secret: %w", err)
 	}
-	slog.Info("Created a Secret",
-		slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
-
+	secretAttr := slog.Group("secret", slog.String("namespace", secret.Namespace), slog.String("name", secret.Name))
+	slog.Info("Created a Secret", secretAttr)
 	defer func() {
 		// Clean up even if ctx is canceled.
 		if err := clientset.CoreV1().Secrets(secret.Namespace).Delete(context.Background(), secret.Name, metav1.DeleteOptions{}); err != nil {
-			slog.Warn("Could not clean up the Secret",
-				slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
+			slog.Warn("Failed to clean up the Secret", secretAttr)
 			return
 		}
-		slog.Info("Cleaned up the Secret",
-			slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
+		slog.Info("Deleted the Secret", secretAttr)
 	}()
 
 	job, err := clientset.BatchV1().Jobs(cronJob.Namespace).Create(ctx,
@@ -114,7 +110,7 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 		metav1.CreateOptions{},
 	)
 	if err != nil {
-		return fmt.Errorf("could not create a Job: %w", err)
+		return fmt.Errorf("create a Job: %w", err)
 	}
 	slog.Info("Created a Job",
 		slog.Group("job", slog.String("namespace", job.Namespace), slog.String("name", job.Name)))
@@ -134,8 +130,7 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 	if err != nil {
 		return fmt.Errorf("apply the owner reference to the Secret: %w", err)
 	}
-	slog.Info("Applied the owner reference to the Secret",
-		slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
+	slog.Info("Applied the owner reference to the Secret", secretAttr)
 
 	if err := WaitForJob(ctx, clientset, job, WaitForJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
 		return fmt.Errorf("run the Job: %w", err)
@@ -191,13 +186,13 @@ func WaitForJob(ctx context.Context, clientset kubernetes.Interface, job *batchv
 	})
 	podInformer, err := pods.StartInformer(clientset, job.Namespace, job.Name, stopCh, containerStartedCh)
 	if err != nil {
-		return fmt.Errorf("could not start the pod informer: %w", err)
+		return fmt.Errorf("start the pod informer: %w", err)
 	}
 	informerWaiter.Start(podInformer.Shutdown)
 
 	jobInformer, err := jobs.StartInformer(clientset, job.Namespace, job.Name, stopCh, jobFinishedCh)
 	if err != nil {
-		return fmt.Errorf("could not start the job informer: %w", err)
+		return fmt.Errorf("start the job informer: %w", err)
 	}
 	informerWaiter.Start(jobInformer.Shutdown)
 
