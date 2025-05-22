@@ -23,7 +23,7 @@ kind: CronJob
 spec:
   # NOTE: This is a one-shot job for cronjob-runner. Do not enable scheduling.
   suspend: true
-  schedule: '@annually'
+  schedule: "@annually"
   jobTemplate:
     spec: # ...snip...
 ```
@@ -72,7 +72,7 @@ See also the [e2e-test workflow runs](https://github.com/int128/cronjob-runner/a
 
 ### Inject environment variables
 
-To inject environment variables to all containers,
+To inject an environment variable to all containers,
 
 ```shell
 cronjob-runner [--namespace your-namespace] --cronjob-name your-cronjob-name --env KEY=VALUE
@@ -84,7 +84,26 @@ For example,
 $ cronjob-runner --cronjob-name create-item --env ITEM_NAME=example --env ITEM_PRICE=100
 ```
 
-:warning: Do not inject any secret. Anyone can see it by kubectl get or kubectl logs.
+:warning: Do not pass any secret to `--env`. Anyone can see it by kubectl get or kubectl logs.
+
+### Inject secrets
+
+To inject a secret to all containers,
+
+```shell
+export KEY=VALUE
+cronjob-runner [--namespace your-namespace] --cronjob-name your-cronjob-name --secret KEY
+```
+
+For example,
+
+```console
+$ export ITEM_PASSWORD=foo
+$ cronjob-runner --cronjob-name create-item --secret ITEM_NAME=example --secret ITEM_PASSWORD
+```
+
+cronjob-runner creates a Kubernetes secret and mounts it to all containers.
+The secret is deleted when the Job is completed.
 
 ## Design
 
@@ -103,15 +122,15 @@ This command sets an owner reference from a Job to the parent CronJob.
 For example,
 
 ```yaml
-    ownerReferences:
-    - apiVersion: batch/v1
-      controller: true
-      kind: CronJob
-      name: simple
-      uid: 948027a3-60af-41d2-8752-6a3be860a200
+ownerReferences:
+  - apiVersion: batch/v1
+    controller: true
+    kind: CronJob
+    name: simple
+    uid: 948027a3-60af-41d2-8752-6a3be860a200
 ```
 
-When a Job is completed or failed, CronJob controller will clean up the outdated Jobs
+When a Job is completed, CronJob controller will clean up the outdated Jobs
 if `spec.successfulJobsHistoryLimit` or `spec.failedJobsHistoryLimit` is set.
 See [CronJob section of the official document](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) for details.
 
