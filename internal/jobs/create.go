@@ -14,7 +14,7 @@ import (
 
 // NewFromCronJob creates a job from the CronJob template.
 // If env is given, it injects the environment variables to all containers.
-func NewFromCronJob(cronJob *batchv1.CronJob, env map[string]string) *batchv1.Job {
+func NewFromCronJob(cronJob *batchv1.CronJob, env, secretEnv map[string]string, secretRef *corev1.LocalObjectReference) *batchv1.Job {
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    cronJob.Namespace,
@@ -30,7 +30,7 @@ func NewFromCronJob(cronJob *batchv1.CronJob, env map[string]string) *batchv1.Jo
 			Labels:      cronJob.Spec.JobTemplate.Labels,
 			Annotations: cronJob.Spec.JobTemplate.Annotations,
 		},
-		Spec: appendEnv(cronJob.Spec.JobTemplate.Spec, env),
+		Spec: appendSecretEnv(appendEnv(cronJob.Spec.JobTemplate.Spec, env), secretEnv, secretRef),
 	}
 }
 
@@ -45,6 +45,38 @@ func appendEnv(jobSpec batchv1.JobSpec, env map[string]string) batchv1.JobSpec {
 		newEnv = append(newEnv, container.Env...)
 		for name, value := range env {
 			newEnv = append(newEnv, corev1.EnvVar{Name: name, Value: value})
+		}
+		newContainer := container.DeepCopy()
+		newContainer.Env = newEnv
+		newContainers = append(newContainers, *newContainer)
+	}
+	newSpec := jobSpec.DeepCopy()
+	newSpec.Template.Spec.Containers = newContainers
+	return *newSpec
+}
+
+func appendSecretEnv(jobSpec batchv1.JobSpec, secretEnv map[string]string, secretRef *corev1.LocalObjectReference) batchv1.JobSpec {
+	if secretRef == nil {
+		return jobSpec
+	}
+	if len(secretEnv) == 0 {
+		return jobSpec
+	}
+
+	var newContainers []corev1.Container
+	for _, container := range jobSpec.Template.Spec.Containers {
+		var newEnv []corev1.EnvVar
+		newEnv = append(newEnv, container.Env...)
+		for key := range secretEnv {
+			newEnv = append(newEnv, corev1.EnvVar{
+				Name: key,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: *secretRef,
+						Key:                  key,
+					},
+				},
+			})
 		}
 		newContainer := container.DeepCopy()
 		newContainer.Env = newEnv

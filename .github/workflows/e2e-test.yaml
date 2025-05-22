@@ -32,6 +32,9 @@ jobs:
       - run: ./cronjob-runner --cronjob-name simple
       - run: ./cronjob-runner --cronjob-name multiple-containers
       - run: ./cronjob-runner --cronjob-name conditional --env SHOULD_BE_TRUE=true
+      - run: ./cronjob-runner --cronjob-name conditional --secret-env SHOULD_BE_TRUE
+        env:
+          SHOULD_BE_TRUE: true
       - run: |
           set +e
           set -x
