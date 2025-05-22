@@ -59,7 +59,7 @@ func RunJobFromCronJob(ctx context.Context, clientset kubernetes.Interface, name
 		slog.String("namespace", cronJob.Namespace),
 		slog.String("name", cronJob.Name)))
 
-	if opts.SecretEnv != nil {
+	if len(opts.SecretEnv) > 0 {
 		if err := runJobFromCronJobWithSecret(ctx, clientset, cronJob, opts); err != nil {
 			return fmt.Errorf("runJobFromCronJobWithSecret: %w", err)
 		}
@@ -99,7 +99,8 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 		slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
 
 	defer func() {
-		if err := clientset.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil {
+		// Clean up even if ctx is canceled.
+		if err := clientset.CoreV1().Secrets(secret.Namespace).Delete(context.Background(), secret.Name, metav1.DeleteOptions{}); err != nil {
 			slog.Warn("Could not clean up the Secret",
 				slog.Group("secret", "namespace", secret.Namespace, "name", secret.Name))
 			return
