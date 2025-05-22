@@ -39,7 +39,7 @@ func TestNewFromCronJob(t *testing.T) {
 				},
 			},
 		}
-		gotJob := NewFromCronJob(cronJob, nil, corev1.LocalObjectReference{}, nil)
+		gotJob := NewFromCronJob(cronJob, nil, nil, nil)
 		wantJob := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:    "default",
@@ -92,7 +92,7 @@ func TestNewFromCronJob(t *testing.T) {
 				},
 			},
 		}
-		gotJob := NewFromCronJob(cronJob, map[string]string{"FOO": "bar"}, corev1.LocalObjectReference{}, nil)
+		gotJob := NewFromCronJob(cronJob, map[string]string{"FOO": "bar"}, nil, nil)
 		wantJob := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:    "default",

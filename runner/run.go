@@ -13,12 +13,14 @@ import (
 	"github.com/int128/cronjob-runner/internal/jobs"
 	"github.com/int128/cronjob-runner/internal/logs"
 	"github.com/int128/cronjob-runner/internal/pods"
-	"github.com/int128/cronjob-runner/internal/secrets"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
+	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 )
 
 // RunCronJobOptions represents a set of options for RunJobFromCronJob.
@@ -27,25 +29,20 @@ type RunCronJobOptions struct {
 	// Optional.
 	Env map[string]string
 
-	SecretEnv []string
+	// SecretEnv is a map of environment variables injected to all containers of a Pod via an ephemeral Secret.
+	// Optional.
+	SecretEnv map[string]string
 
 	// ContainerLogger is an implementation of ContainerLogger interface.
 	// Default to the defaultContainerLogger.
 	ContainerLogger ContainerLogger
 }
 
-func (opts RunCronJobOptions) secretEnvMap() map[string]string {
-	secretEnvMap := make(map[string]string)
-	for _, env := range opts.SecretEnv {
-		secretEnvMap[env] = os.Getenv(env)
-	}
-	return secretEnvMap
-}
-
 // RunJobFromCronJob creates a Job from the existing CronJob, and waits for the completion.
 //
 // It runs a new Job as follows:
 //
+//   - Create a Secret if RunCronJobOptions.SecretEnv is set.
 //   - Create a Job from the CronJob template.
 //   - Run the Job. See RunJob().
 //
@@ -62,16 +59,70 @@ func RunJobFromCronJob(ctx context.Context, clientset kubernetes.Interface, name
 		slog.String("namespace", cronJob.Namespace),
 		slog.String("name", cronJob.Name)))
 
-	secret, err := secrets.Create(ctx, clientset, namespace, cronJobName, opts.secretEnvMap())
-	if err != nil {
-		return fmt.Errorf("could not create a Secret for Job: %w", err)
+	if opts.SecretEnv != nil {
+		if err := runJobFromCronJobWithSecret(ctx, clientset, cronJob, opts); err != nil {
+			return fmt.Errorf("runJobFromCronJobWithSecret: %w", err)
+		}
+		return nil
 	}
-	job := jobs.NewFromCronJob(cronJob, opts.Env, corev1.LocalObjectReference{Name: secret.Name}, opts.SecretEnv)
-	if _, err := secrets.ApplyOwnerReference(ctx, clientset, namespace, secret.Name, job); err != nil {
-		return fmt.Errorf("could not apply the owner reference to the Secret: %w", err)
-	}
+
+	job := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, nil)
 	if err := RunJob(ctx, clientset, job, RunJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
-		return fmt.Errorf("could not run the Job: %w", err)
+		return fmt.Errorf("run the Job: %w", err)
+	}
+	return nil
+}
+
+func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Interface, cronJob *batchv1.CronJob, opts RunCronJobOptions) error {
+	secret, err := clientset.CoreV1().Secrets(cronJob.Namespace).Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:    cronJob.Namespace,
+			GenerateName: fmt.Sprintf("%s-", cronJob.Name),
+		},
+		Immutable:  ptr.To(true),
+		StringData: opts.SecretEnv,
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("create a Secret: %w", err)
+	}
+	slog.Info("Created a Secret", slog.Group("secret",
+		"namespace", secret.Namespace,
+		"name", secret.Name))
+	defer func() {
+		if err := clientset.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil {
+			slog.Warn("Could not clean up the Secret", slog.Group("secret",
+				"namespace", secret.Namespace,
+				"name", secret.Name))
+			return
+		}
+		slog.Info("Cleaned up the Secret", slog.Group("secret",
+			"namespace", secret.Namespace,
+			"name", secret.Name))
+	}()
+
+	secretRef := &corev1.LocalObjectReference{Name: secret.Name}
+	job := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, secretRef)
+
+	secret, err = clientset.CoreV1().Secrets(cronJob.Namespace).Apply(ctx,
+		corev1ac.Secret(secret.Name, cronJob.Namespace).WithOwnerReferences(
+			&metav1ac.OwnerReferenceApplyConfiguration{
+				APIVersion: ptr.To(batchv1.SchemeGroupVersion.String()),
+				Kind:       ptr.To("Job"),
+				Name:       ptr.To(job.Name),
+				UID:        &job.UID,
+			},
+		),
+		metav1.ApplyOptions{FieldManager: "cronjob-runner"},
+	)
+	if err != nil {
+		return fmt.Errorf("apply the owner reference to the Secret: %w", err)
+	}
+	slog.Info("Applied the owner reference to the Secret", slog.Group("secret",
+		"namespace", secret.Namespace,
+		"name", secret.Name))
+
+	if err := RunJob(ctx, clientset, job, RunJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
+		return fmt.Errorf("run the Job: %w", err)
 	}
 	return nil
 }

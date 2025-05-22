@@ -14,7 +14,7 @@ import (
 
 // NewFromCronJob creates a job from the CronJob template.
 // If env is given, it injects the environment variables to all containers.
-func NewFromCronJob(cronJob *batchv1.CronJob, env map[string]string, secret corev1.LocalObjectReference, secretEnv []string) *batchv1.Job {
+func NewFromCronJob(cronJob *batchv1.CronJob, env, secretEnv map[string]string, secretRef *corev1.LocalObjectReference) *batchv1.Job {
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:    cronJob.Namespace,
@@ -30,7 +30,7 @@ func NewFromCronJob(cronJob *batchv1.CronJob, env map[string]string, secret core
 			Labels:      cronJob.Spec.JobTemplate.Labels,
 			Annotations: cronJob.Spec.JobTemplate.Annotations,
 		},
-		Spec: appendSecretEnv(appendEnv(cronJob.Spec.JobTemplate.Spec, env), secret, secretEnv),
+		Spec: appendSecretEnv(appendEnv(cronJob.Spec.JobTemplate.Spec, env), secretEnv, secretRef),
 	}
 }
 
@@ -55,7 +55,10 @@ func appendEnv(jobSpec batchv1.JobSpec, env map[string]string) batchv1.JobSpec {
 	return *newSpec
 }
 
-func appendSecretEnv(jobSpec batchv1.JobSpec, secret corev1.LocalObjectReference, secretEnv []string) batchv1.JobSpec {
+func appendSecretEnv(jobSpec batchv1.JobSpec, secretEnv map[string]string, secretRef *corev1.LocalObjectReference) batchv1.JobSpec {
+	if secretRef == nil {
+		return jobSpec
+	}
 	if len(secretEnv) == 0 {
 		return jobSpec
 	}
@@ -64,13 +67,16 @@ func appendSecretEnv(jobSpec batchv1.JobSpec, secret corev1.LocalObjectReference
 	for _, container := range jobSpec.Template.Spec.Containers {
 		var newEnv []corev1.EnvVar
 		newEnv = append(newEnv, container.Env...)
-		for _, name := range secretEnv {
-			newEnv = append(newEnv, corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: secret,
-					Key:                  name,
+		for key := range secretEnv {
+			newEnv = append(newEnv, corev1.EnvVar{
+				Name: key,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: *secretRef,
+						Key:                  key,
+					},
 				},
-			}})
+			})
 		}
 		newContainer := container.DeepCopy()
 		newContainer.Env = newEnv
