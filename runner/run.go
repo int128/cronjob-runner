@@ -44,7 +44,7 @@ type RunCronJobOptions struct {
 //
 //   - Create a Secret if RunCronJobOptions.SecretEnv is set.
 //   - Create a Job from the CronJob template.
-//   - Run the Job. See RunJob().
+//   - Run the Job. See WaitForJob().
 //
 // If the job is succeeded, it returns nil.
 // If the job is failed, it returns JobFailedError.
@@ -66,8 +66,17 @@ func RunJobFromCronJob(ctx context.Context, clientset kubernetes.Interface, name
 		return nil
 	}
 
-	job := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, nil)
-	if err := RunJob(ctx, clientset, job, RunJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
+	jobToCreate := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, nil)
+	job, err := clientset.BatchV1().Jobs(jobToCreate.Namespace).Create(ctx, jobToCreate, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("could not create a Job: %w", err)
+	}
+	slog.Info("Created a Job", slog.Group("job",
+		slog.String("namespace", job.Namespace),
+		slog.String("name", job.Name)))
+	printJobYAML(job)
+
+	if err := WaitForJob(ctx, clientset, job, WaitForJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
 		return fmt.Errorf("run the Job: %w", err)
 	}
 	return nil
@@ -88,6 +97,7 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 	slog.Info("Created a Secret", slog.Group("secret",
 		"namespace", secret.Namespace,
 		"name", secret.Name))
+
 	defer func() {
 		if err := clientset.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil {
 			slog.Warn("Could not clean up the Secret", slog.Group("secret",
@@ -101,7 +111,15 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 	}()
 
 	secretRef := &corev1.LocalObjectReference{Name: secret.Name}
-	job := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, secretRef)
+	jobToCreate := jobs.NewFromCronJob(cronJob, opts.Env, opts.SecretEnv, secretRef)
+	job, err := clientset.BatchV1().Jobs(jobToCreate.Namespace).Create(ctx, jobToCreate, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("could not create a Job: %w", err)
+	}
+	slog.Info("Created a Job", slog.Group("job",
+		slog.String("namespace", job.Namespace),
+		slog.String("name", job.Name)))
+	printJobYAML(job)
 
 	secret, err = clientset.CoreV1().Secrets(cronJob.Namespace).Apply(ctx,
 		corev1ac.Secret(secret.Name, cronJob.Namespace).WithOwnerReferences(
@@ -121,24 +139,23 @@ func runJobFromCronJobWithSecret(ctx context.Context, clientset kubernetes.Inter
 		"namespace", secret.Namespace,
 		"name", secret.Name))
 
-	if err := RunJob(ctx, clientset, job, RunJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
+	if err := WaitForJob(ctx, clientset, job, WaitForJobOptions{ContainerLogger: opts.ContainerLogger}); err != nil {
 		return fmt.Errorf("run the Job: %w", err)
 	}
 	return nil
 }
 
-// RunJobOptions represents a set of options for RunJob.
-type RunJobOptions struct {
+// WaitForJobOptions represents a set of options for WaitForJob.
+type WaitForJobOptions struct {
 	// ContainerLogger is an implementation of ContainerLogger interface.
 	// Default to the defaultContainerLogger.
 	ContainerLogger ContainerLogger
 }
 
-// RunJob creates the Job and waits for the completion.
+// WaitForJob waits for the completion of the Job.
 //
-// It runs a new Job as follows:
+// It waits for the Job as follows:
 //
-//   - Create a Job.
 //   - Show the statuses of Job, Pod(s) and container(s) when changed.
 //   - Tail the log streams of all containers.
 //   - Wait for the Job to be succeeded or failed.
@@ -147,19 +164,10 @@ type RunJobOptions struct {
 // If the job is failed, it returns JobFailedError.
 // Otherwise, it returns an error.
 // If the context is canceled, it stops gracefully.
-func RunJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Job, opts RunJobOptions) error {
+func WaitForJob(ctx context.Context, clientset kubernetes.Interface, job *batchv1.Job, opts WaitForJobOptions) error {
 	if opts.ContainerLogger == nil {
 		opts.ContainerLogger = defaultContainerLogger{}
 	}
-
-	job, err := clientset.BatchV1().Jobs(job.Namespace).Create(ctx, job, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("could not create a Job: %w", err)
-	}
-	slog.Info("Created a Job", slog.Group("job",
-		slog.String("namespace", job.Namespace),
-		slog.String("name", job.Name)))
-	printJobYAML(job)
 
 	stopCh := make(chan struct{})
 	containerStartedCh := make(chan pods.ContainerStartedEvent)
