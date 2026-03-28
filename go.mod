@@ -5,10 +5,10 @@ go 1.26.1
 require (
 	github.com/google/go-cmp v0.7.0
 	github.com/spf13/pflag v1.0.10
-	k8s.io/api v0.35.2
+	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
-	k8s.io/cli-runtime v0.35.2
-	k8s.io/client-go v0.35.2
+	k8s.io/cli-runtime v0.35.3
+	k8s.io/client-go v0.35.3
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5
 )
 
