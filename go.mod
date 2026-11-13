@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
 	k8s.io/cli-runtime v0.37.2
